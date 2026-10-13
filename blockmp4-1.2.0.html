@@ -1,0 +1,2244 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="holilov">
+<title>blockmp4 — 動画をブロックで再生するデータパックの作成ツール</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='2' height='2' fill='%235d9c34'/%3E%3Crect x='2' width='2' height='2' fill='%238d6b4a'/%3E%3Crect y='2' width='2' height='2' fill='%23c9a46a'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23557ab8'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f4f2ec;
+  --card: #ffffff;
+  --ink: #1d2126;
+  --sub: #5b636c;
+  --line: #e2ded4;
+  --field: #fbfaf7;
+  --accent: #4e8a2a;
+  --accent-ink: #ffffff;
+  --accent-soft: #eaf3e1;
+  --warn: #9a5b00;
+  --error: #b42318;
+  --shadow: 0 1px 2px rgba(20, 24, 28, 0.06), 0 6px 20px rgba(20, 24, 28, 0.05);
+  --radius: 14px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --card: #1d2125;
+    --ink: #e7e5e1;
+    --sub: #a1a8b0;
+    --line: #30363c;
+    --field: #171a1e;
+    --accent: #7cc24d;
+    --accent-ink: #10150c;
+    --accent-soft: #223019;
+    --warn: #e0a24a;
+    --error: #ff8a7a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.25);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.75 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, sans-serif;
+}
+
+a { color: var(--accent); }
+
+code {
+  font: 0.92em/1.4 ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  background: var(--accent-soft);
+  padding: 0.1em 0.4em;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.top, main, footer {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-top: 28px;
+  padding-bottom: 16px;
+}
+
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { width: 44px; height: 44px; border-radius: 9px; box-shadow: var(--shadow); image-rendering: pixelated; }
+h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: 0.01em; }
+.tagline { margin: 2px 0 0; color: var(--sub); }
+.ver { margin: 0; color: var(--sub); font-size: 13px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin: 0 0 16px;
+}
+
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+
+h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 18px; }
+
+.num {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.intro p { margin: 0 0 8px; }
+.hint { color: var(--sub); font-size: 13.5px; }
+.small { font-size: 12px; }
+
+.msg.error { color: var(--error); font-weight: 600; }
+
+/* 1. 動画 */
+.drop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 30px 16px;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  background: var(--field);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop.disabled { opacity: 0.5; pointer-events: none; }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.drop-main { font-weight: 700; font-size: 16px; }
+.drop-sub { color: var(--sub); font-size: 13px; }
+
+.source { margin-top: 14px; }
+.source video { display: block; width: 100%; max-height: 360px; border-radius: 10px; background: #000; }
+.source-info { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 0; font-size: 13.5px; color: var(--sub); }
+.source-info strong { color: var(--ink); overflow-wrap: anywhere; }
+
+/* 2. 設定 */
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.fields.small { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-top: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.wide { grid-column: 1 / -1; }
+.label { font-weight: 700; font-size: 14px; padding: 0; }
+.field small, .check small { color: var(--sub); font-size: 12.5px; line-height: 1.5; }
+.field small.warn { color: var(--warn); }
+
+input[type=text], input[type=number], select {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+
+input:focus-visible, select:focus-visible, button:focus-visible, .mode:focus-within, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin: 4px 0 0; accent-color: var(--accent); flex: none; }
+.check span { display: flex; flex-direction: column; font-weight: 700; font-size: 14px; }
+.check small { font-weight: 400; }
+
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.mode input { position: absolute; opacity: 0; pointer-events: none; }
+.swatch { width: 100%; height: 34px; border-radius: 6px; image-rendering: pixelated; margin-bottom: 6px; }
+.mode-title { font-weight: 700; font-size: 14px; }
+.mode-sub { color: var(--sub); font-size: 12px; line-height: 1.5; }
+
+.more { margin-top: 16px; }
+.more summary, .help summary, .license summary { cursor: pointer; font-weight: 700; }
+
+/* 見本 */
+.preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border-radius: 10px;
+  background: repeating-conic-gradient(var(--field) 0 25%, var(--line) 0 50%) 0 0 / 16px 16px;
+  overflow: hidden;
+}
+
+.preview canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.preview-empty { position: absolute; margin: 0; padding: 0 16px; color: var(--sub); font-size: 13.5px; text-align: center; }
+
+/* 3. 作る */
+button, .download { font: inherit; cursor: pointer; }
+
+.primary {
+  display: inline-block;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 16px;
+  padding: 12px 22px;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: filter 0.15s, transform 0.05s;
+}
+
+.primary:hover { filter: brightness(1.06); }
+.primary:active { transform: translateY(1px); }
+.primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+
+.ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 4px 12px;
+}
+
+.progress { margin-top: 16px; }
+.bar { height: 10px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+.progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 14px; }
+.progress .hint { margin: 6px 0 0; }
+
+/* 4. できた */
+.done { border-color: var(--accent); }
+.download { overflow-wrap: anywhere; }
+.steps { padding-left: 1.4em; margin: 14px 0 6px; }
+.steps li { margin: 0 0 6px; }
+
+/* 使い方 */
+.help details + details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.help table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.help th, .help td { text-align: left; vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--line); }
+.help th { white-space: nowrap; font-weight: 700; }
+.help ul { padding-left: 1.3em; }
+
+footer { padding-bottom: 40px; color: var(--sub); font-size: 13px; }
+footer pre { white-space: pre-wrap; font-size: 11.5px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+footer h3 { margin: 14px 0 6px; font-size: 13px; color: var(--ink); }
+
+@media (max-width: 640px) {
+  .card { padding: 16px; }
+  .fields { grid-template-columns: 1fr; }
+  .modes { grid-template-columns: 1fr; }
+  .help th { white-space: normal; }
+  h1 { font-size: 24px; }
+}
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 4 4" aria-hidden="true">
+      <rect width="2" height="2" fill="#5d9c34"/><rect x="2" width="2" height="2" fill="#8d6b4a"/>
+      <rect y="2" width="2" height="2" fill="#c9a46a"/><rect x="2" y="2" width="2" height="2" fill="#557ab8"/>
+    </svg>
+    <div>
+      <h1>blockmp4</h1>
+      <p class="tagline">動画をブロックで再生するデータパックの作成ツール</p>
+    </div>
+  </div>
+  <p class="ver" id="ver"></p>
+</header>
+
+<main>
+  <section class="card intro">
+    <p>K2Z/角角砂糖( <a href="https://www.youtube.com/@K2Z-角角砂糖" rel="noopener">https://www.youtube.com/@K2Z-角角砂糖</a> )氏の作品に影響を受け、ブロック更新によるアニメーション制作を手軽に試行できるツールを開発しました。Minecraft Java Edition 26.3にて動作確認済みです。</p>
+    <p>本ツールは、動画ファイルを Minecraft Java Edition のデータパック（ZIP 形式）に変換します。作成した ZIP をワールドの <code>datapacks</code> フォルダに配置すると、地面に設置したブロックのスクリーンで動画を再生できます。MOD・プラグインは不要です。</p>
+    <p class="hint">変換処理はすべてブラウザ内で行われます。動画ファイルが外部に送信されることはありません。</p>
+  </section>
+
+  <section class="card" id="step-video">
+    <h2><span class="num">1</span>動画の選択</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="video/*,.mp4,.m4v,.mov,.webm,.mkv">
+      <span class="drop-main">動画ファイルをここにドラッグ＆ドロップしてください</span>
+      <span class="drop-sub">またはクリックして選択（MP4・WebM・MOV など）</span>
+    </label>
+    <div class="source" id="source" hidden>
+      <video id="video" controls muted playsinline></video>
+      <p class="source-info"><strong id="file-name"></strong><span id="file-info"></span></p>
+    </div>
+    <p class="msg error" id="video-error" hidden></p>
+  </section>
+
+  <section class="card" id="step-settings">
+    <h2><span class="num">2</span>設定</h2>
+    <div class="fields">
+      <label class="field wide">
+        <span class="label">名前</span>
+        <input id="name" type="text" maxlength="40" spellcheck="false" autocomplete="off" placeholder="video">
+        <small id="name-note"></small>
+      </label>
+      <fieldset class="field wide">
+        <legend class="label">モード</legend>
+        <div class="modes" id="modes"></div>
+      </fieldset>
+      <label class="field">
+        <span class="label">縦のブロック数</span>
+        <input id="height" type="number" min="1" max="1024" step="1" value="72">
+        <small id="size-note"></small>
+      </label>
+      <label class="field">
+        <span class="label">FPS（1～20）</span>
+        <input id="fps" type="number" min="1" max="20" step="1" value="20">
+        <small>1 秒あたりのコマ数です。20 が最も滑らかです。</small>
+      </label>
+      <label class="check wide">
+        <input id="light" type="checkbox">
+        <span>ライトブロックを重ねる<small>スクリーンの上に不可視の光源を配置し、夜間や屋内でも明るく表示します。</small></span>
+      </label>
+    </div>
+    <details class="more">
+      <summary>詳細設定</summary>
+      <div class="fields small">
+        <label class="field"><span class="label">横のブロック数</span><input id="width" type="number" min="1" max="2048" placeholder="自動"><small>未入力の場合、縦の値と動画の縦横比から自動で決まります。</small></label>
+        <label class="field"><span class="label">開始位置（秒）</span><input id="start" type="number" min="0" step="0.1" placeholder="0"></label>
+        <label class="field"><span class="label">変換する長さ（秒）</span><input id="duration" type="number" min="0" step="0.1" placeholder="最後まで"></label>
+        <label class="field"><span class="label">ディザリング</span>
+          <select id="dither"><option value="ordered">有効（近い 2 色を混ぜて階調を表現）</option><option value="none">無効</option></select></label>
+        <label class="field"><span class="label">色の不感帯</span><input id="hold" type="number" min="0" step="0.01"><small>大きくすると、ちらつきとデータ量が減ります。</small></label>
+        <label class="field"><span class="label">混色の抑制</span><input id="spread" type="number" min="0" step="0.05"><small>小さいほど滑らかになり、粒状感が増えます。</small></label>
+        <label class="field"><span class="label">模様のあるブロックの抑制</span><input id="noise" type="number" min="0" step="0.05"></label>
+        <label class="field"><span class="label">キーフレームの間隔（秒）</span><input id="key" type="number" min="0.05" step="0.5" placeholder="2"><small>短くするとシークが軽くなり、ファイル数が増えます。</small></label>
+        <label class="field"><span class="label">読み込み方式</span>
+          <select id="decoder"><option value="auto">自動</option><option value="video">互換モード（1 フレームずつ読み込み）</option></select></label>
+      </div>
+    </details>
+    <p class="hint" id="weight-note"></p>
+  </section>
+
+  <section class="card" id="step-preview">
+    <h2>プレビュー</h2>
+    <div class="preview">
+      <canvas id="preview" width="16" height="9"></canvas>
+      <p class="preview-empty" id="preview-empty">動画を選択すると、ブロックで表示した見本がここに表示されます。</p>
+    </div>
+    <p class="hint">動画の現在の場面をブロックの色で表示した見本です。動画の再生位置を変更すると更新されます。</p>
+  </section>
+
+  <section class="card" id="step-make">
+    <h2><span class="num">3</span>データパックの作成</h2>
+    <button class="primary" id="make" type="button" disabled>データパックを作成</button>
+    <div class="progress" id="progress" hidden>
+      <div class="bar"><div id="bar"></div></div>
+      <div class="progress-row"><span id="progress-text"></span><button class="ghost" id="cancel" type="button">中止</button></div>
+      <p class="hint">処理が終わるまで、このタブを閉じないでください。</p>
+    </div>
+    <p class="msg error" id="make-error" hidden></p>
+  </section>
+
+  <section class="card done" id="step-done" hidden>
+    <h2><span class="num">4</span>ワールドへの導入</h2>
+    <a class="primary download" id="download" href="#">ダウンロード</a>
+    <p id="done-info"></p>
+    <ol class="steps">
+      <li>ダウンロードした <b id="zip-name">ZIP</b> を、<b>解凍せずに</b>ワールドの <code>datapacks</code> フォルダへ配置してください。</li>
+      <li>ゲーム内で <code>/reload</code> を実行してください（ワールドに入り直しても構いません）。</li>
+      <li><code>/function blockmp4:wand</code> で杖を入手し、地面を見ながら「設置」の杖（絵画）を 2 回使用するとスクリーンが設置されます。
+        「再生 / 一時停止」の杖（黄緑の染料）で再生を開始します。</li>
+    </ol>
+    <p class="hint" id="memory-note"></p>
+    <p class="hint">同じ名前の ZIP を差し替える場合は、ワールドを閉じてから行ってください（ワールドを開いている間はファイルが使用中のため、置き換えられません）。新しい名前の ZIP であれば、ワールドを開いたまま配置して <code>/reload</code> を実行できます。</p>
+  </section>
+
+  <section class="card help">
+    <details>
+      <summary>datapacks フォルダの場所</summary>
+      <p>シングルプレイの場合：ワールド選択画面でワールドを選択し、「編集」→「ワールドフォルダーを開く」で開いたフォルダ内の <code>datapacks</code> フォルダです。</p>
+      <p>例：<code>C:\Users\(ユーザー名)\AppData\Roaming\.minecraft\saves\(ワールド名)\datapacks</code></p>
+      <p>サーバーの場合：<code>world\datapacks</code> です。コマンドの実行には、チートの許可（サーバーの場合は OP 権限）が必要です。</p>
+    </details>
+    <details>
+      <summary>ゲーム内での操作（杖・コマンド）</summary>
+      <p><code>/function blockmp4:wand</code> で 8 本の杖を入手できます。手に持って右クリックで使用します。</p>
+      <table>
+        <tr><th>設置（絵画）</th><td>1 回目で設置範囲を黄色の枠で表示します。緑の印が左奥の角となり、手前と右方向に広がります。同じ位置で 2 回目を使用すると設置します。</td></tr>
+        <tr><th>再生 / 一時停止（黄緑の染料）</th><td>停止中は再生、再生中は一時停止します。</td></tr>
+        <tr><th>停止（赤の染料）</th><td>停止して最初のフレームに戻ります。</td></tr>
+        <tr><th>戻る（光の矢）・進む（矢）</th><td>10 秒戻る / 進みます。スニーク中に使用すると 1 フレームずつ移動します。</td></tr>
+        <tr><th>動画の切り替え（本）</th><td>次に設置する動画を切り替えます。</td></tr>
+        <tr><th>取り消し（回収コンパス）</th><td>表示中の枠を消去します。枠がない場合は、最後に設置したスクリーンを撤去し、地形を元に戻します。</td></tr>
+        <tr><th>撤去（バリア）</th><td>最も近いスクリーンを撤去し、地形を元に戻します。</td></tr>
+      </table>
+      <p>同じ操作はコマンドでも行えます（いずれも <code>/function blockmp4:</code> に続けて入力します）：<code>start</code>・<code>pause</code>・<code>resume</code>・<code>stop</code>・<code>seek {t:30}</code>（30 秒の位置へ移動）・<code>seek_frame {f:300}</code>・<code>skip {t:-10}</code>・<code>skip_frame {f:1}</code>・<code>undo</code>・<code>remove</code>・<code>next</code>・<code>video/(名前)</code>・<code>memory {mb:1024}</code>・<code>uninstall</code></p>
+      <p>データパックを取り外す前に、<code>/function blockmp4:uninstall</code> ですべてのスクリーンを撤去してください。</p>
+    </details>
+    <details>
+      <summary>スクリーンの大きさと負荷の目安</summary>
+      <p>スクリーンが大きいほど、また FPS が高いほど負荷が増えます。以下は、動きの多い MV を使用して作者の環境で検証した結果です。</p>
+      <ul>
+        <li>縦 128（228×128）・20 FPS：等速で再生</li>
+        <li>縦 162（288×162）・20 FPS：ほぼ等速（負荷の高い場面でわずかに遅延）</li>
+        <li>縦 256（455×256）・10 FPS：ほぼ等速（「色の不感帯」を 0.05 に設定した場合）</li>
+      </ul>
+      <p>処理が追いつかない場合でも映像は崩れず、再生速度が遅くなります。</p>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <p>変換する動画は、ご自身で撮影したもの、または使用が許可されているものをご利用ください。作成したデータパックを配布・公開する場合は、元の動画の権利にご注意ください。</p>
+  <p>本ツールおよび本ツールで作成したデータパックの使用により生じたいかなる損害についても、作者は一切の責任を負いません。ワールドのバックアップを取ったうえで、自己責任でご利用ください。</p>
+  <p>ブロックの一覧は <a href="https://github.com/RosegoldMC/minecraft-data.cr" rel="noopener">RosegoldMC/minecraft-data.cr</a>（MIT License）を使用しています。ブロックの色は、各ブロックのテクスチャの平均色をあらかじめ算出して収録しています（テクスチャ自体は含まれていません）。</p>
+  <details class="license">
+    <summary>ライセンス</summary>
+    <h3>blockmp4</h3>
+    <pre>すっごいざっくり言うと!!
+再配布許可
+商用利用許可
+R18利用許可
+クレジットは書いといてね
+って感じ。
+
+上の文言と下の文言に相違が生まれた場合、下の文言が優先されます
+
+©2026 holilov
+以下に定める条件に従い、本ソフトウェアおよび関連文書のファイル（以下「ソフトウェア」）の複製を取得するすべての人に対し、ソフトウェアを無償で扱うことを無制限に許可します。これには、ソフトウェアの使用、複製、変更、結合、公表、配布、サブライセンス設定、および/または販売の権利、ならびにソフトウェアを提供する相手にそれを許可する権利が含まれますが、これらに限定されません。
+上記の著作権表示は、ソフトウェアのすべての複製または重要な部分に含まれるものとします。
+本ソフトウェアは「現状のまま」提供され、商品性、特定目的への適合性、および権利侵害がないことに対する保証を含め、明示的か黙示的かを問わず、いかなる種類の保証も行われません。著者または著作権所有者は、契約上の行為、不法行為、またはその他の行為であるかを問わず、ソフトウェア、またはソフトウェアの使用もしくはその他の取り扱いに起因または関連して発生するいかなる請求、損害、その他の責任についても、一切の責任を負わないものとします。</pre>
+    <h3>ブロックの一覧（RosegoldMC/minecraft-data.cr）</h3>
+    <pre>MIT License
+
+Copyright (c) 2022 grepsedawk &lt;grepsedawk@users.noreply.github.com&gt;
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the &quot;Software&quot;), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+  </details>
+  <p>※このツールの開発にはClaudeCodeを利用しています。</p>
+  <p class="small">blockmp4 ©2026 holilov</p>
+  <p class="small">NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.</p>
+</footer>
+
+<script id="bmp4-data" type="application/json">{"tool":"1.2.0","mc":{"id":"26.3","dataVersion":5023,"packFormat":[121,0],"keys":["id","properties"]},"modes":{"all":{"defaults":{"dither":"ordered","spread":0.25,"hold":0.02,"noise":0.25,"tone":false},"entries":[{"n":"minecraft:stone","p":{},"lab":[0.5935448408126831,0.0,0.0],"noise":0.036674000322818756,"rgb":[126.1,126.1,126.1]},{"n":"minecraft:granite","p":{},"lab":[0.5668951869010925,0.04890468716621399,0.0427631139755249],"noise":0.07452234625816345,"rgb":[151.8,105.8,88.7]},{"n":"minecraft:polished_granite","p":{},"lab":[0.5801175236701965,0.0496770441532135,0.04349634051322937],"noise":0.07559849321842194,"rgb":[156.5,109.4,91.9]},{"n":"minecraft:diorite","p":{},"lab":[0.8098354935646057,0.0004011094570159912,-0.0006564855575561523],"noise":0.11059369146823883,"rgb":[192.7,192.6,193.1]},{"n":"minecraft:polished_diorite","p":{},"lab":[0.8229516744613647,0.0008930563926696777,-0.001994490623474121],"noise":0.10949625074863434,"rgb":[196.9,196.6,198.2]},{"n":"minecraft:andesite","p":{},"lab":[0.6316713690757751,-1.919269561767578e-05,-0.0005352497100830078],"noise":0.05396246537566185,"rgb":[137.3,137.5,137.8]},{"n":"minecraft:polished_andesite","p":{},"lab":[0.6272186636924744,-0.0029368996620178223,0.0005508661270141602],"noise":0.07134027779102325,"rgb":[134.6,136.8,135.9]},{"n":"minecraft:coarse_dirt","p":{},"lab":[0.4969857335090637,0.03231893479824066,0.05217549204826355],"noise":0.09723988175392151,"rgb":[125.0,89.7,62.7]},{"n":"minecraft:podzol","p":{"snowy":"false"},"lab":[0.3991854190826416,0.022346019744873047,0.06547847390174866],"noise":0.05538508668541908,"rgb":[94.7,64.5,24.2]},{"n":"minecraft:cobblestone","p":{},"lab":[0.6122796535491943,0.0006486475467681885,-0.00027179718017578125],"noise":0.10021401196718216,"rgb":[132.0,131.5,131.8]},{"n":"minecraft:oak_planks","p":{},"lab":[0.6366922855377197,0.014980524778366089,0.07883960008621216],"noise":0.08644626289606094,"rgb":[165.3,133.6,81.0]},{"n":"minecraft:spruce_planks","p":{},"lab":[0.4770631194114685,0.02214770019054413,0.06208670139312744],"noise":0.053318966180086136,"rgb":[116.5,86.2,49.5]},{"n":"minecraft:birch_planks","p":{},"lab":[0.7615294456481934,-0.0036856234073638916,0.07485389709472656],"noise":0.06581597030162811,"rgb":[193.9,176.9,122.2]},{"n":"minecraft:jungle_planks","p":{},"lab":[0.6033545732498169,0.04008130729198456,0.06347370147705078],"noise":0.08372321724891663,"rgb":[163.5,117.9,83.6]},{"n":"minecraft:acacia_planks","p":{},"lab":[0.556586742401123,0.07976213097572327,0.08411765098571777],"noise":0.04945651441812515,"rgb":[169.6,91.3,50.8]},{"n":"minecraft:cherry_planks","p":{},"lab":[0.8106597065925598,0.049022138118743896,0.024802982807159424],"noise":0.054518163204193115,"rgb":[226.7,180.2,174.3]},{"n":"minecraft:dark_oak_planks","p":{},"lab":[0.3174637258052826,0.022706635296344757,0.045475780963897705],"noise":0.04387202486395836,"rgb":[68.3,44.2,20.7]},{"n":"minecraft:pale_oak_wood","p":{"axis":"x"},"lab":[0.43892112374305725,0.011568665504455566,0.00789591670036316],"noise":0.061991434544324875,"rgb":[89.6,79.6,77.1]},{"n":"minecraft:pale_oak_planks","p":{},"lab":[0.8998398184776306,0.009666740894317627,0.0047920942306518555],"noise":0.07326388359069824,"rgb":[229.0,219.4,218.1]},{"n":"minecraft:mangrove_planks","p":{},"lab":[0.42248645424842834,0.07877837121486664,0.041645169258117676],"noise":0.04991934821009636,"rgb":[118.9,56.4,49.5]},{"n":"minecraft:poplar_planks","p":{},"lab":[0.6443050503730774,0.009342312812805176,0.019016027450561523],"noise":0.06314969062805176,"rgb":[151.0,139.0,128.4]},{"n":"minecraft:bamboo_planks","p":{},"lab":[0.7544485926628113,-0.014414459466934204,0.11518847942352295],"noise":0.08326920866966248,"rgb":[195.9,175.5,82.2]},{"n":"minecraft:bamboo_mosaic","p":{},"lab":[0.7445768117904663,-0.014499396085739136,0.11474573612213135],"noise":0.07990813255310059,"rgb":[192.6,172.4,79.4]},{"n":"minecraft:gold_ore","p":{},"lab":[0.6433531045913696,0.0071694254875183105,0.035986870527267456],"noise":0.1232432946562767,"rgb":[153.5,139.0,116.5]},{"n":"minecraft:deepslate_gold_ore","p":{},"lab":[0.5645674467086792,0.010031938552856445,0.04626643657684326],"noise":0.17453019320964813,"rgb":[133.5,114.7,86.3]},{"n":"minecraft:iron_ore","p":{},"lab":[0.6155993342399597,0.007660895586013794,0.01222527027130127],"noise":0.06985437870025635,"rgb":[139.8,130.9,124.5]},{"n":"minecraft:deepslate_iron_ore","p":{},"lab":[0.5339800119400024,0.010359153151512146,0.01528748869895935],"noise":0.12997877597808838,"rgb":[117.8,106.4,98.9]},{"n":"minecraft:coal_ore","p":{},"lab":[0.5405365824699402,-0.0001967698335647583,0.0003234446048736572],"noise":0.1105271726846695,"rgb":[110.6,110.7,110.5]},{"n":"minecraft:deepslate_coal_ore","p":{},"lab":[0.4357006549835205,0.0004222095012664795,-0.0016035735607147217],"noise":0.11750505864620209,"rgb":[81.1,81.1,82.1]},{"n":"minecraft:nether_gold_ore","p":{},"lab":[0.4743858575820923,0.04918697476387024,0.06178191304206848],"noise":0.17335177958011627,"rgb":[127.1,78.4,48.4]},{"n":"minecraft:oak_log","p":{"axis":"x"},"lab":[0.47755327820777893,0.015375614166259766,0.059023767709732056],"noise":0.08168299496173859,"rgb":[113.0,88.1,52.3]},{"n":"minecraft:oak_log","p":{"axis":"y"},"lab":[0.6112689971923828,0.014801114797592163,0.07590538263320923],"noise":0.11066942662000656,"rgb":[156.7,126.2,76.0]},{"n":"minecraft:spruce_log","p":{"axis":"x"},"lab":[0.29318246245384216,0.020184777677059174,0.04163350164890289],"noise":0.04027970880270004,"rgb":[60.2,38.9,17.7]},{"n":"minecraft:spruce_log","p":{"axis":"y"},"lab":[0.4612525999546051,0.021487131714820862,0.0588223934173584],"noise":0.060132965445518494,"rgb":[110.9,82.1,47.8]},{"n":"minecraft:birch_log","p":{"axis":"x"},"lab":[0.9035689830780029,9.864568710327148e-06,0.005208849906921387],"noise":0.17889024317264557,"rgb":[224.3,223.0,219.3]},{"n":"minecraft:birch_log","p":{"axis":"y"},"lab":[0.7827708125114441,-0.0016288161277770996,0.05652952194213867],"noise":0.11746501177549362,"rgb":[197.3,183.7,143.3]},{"n":"minecraft:jungle_log","p":{"axis":"x"},"lab":[0.40103375911712646,0.003876730799674988,0.0648755133152008],"noise":0.05194832384586334,"rgb":[87.3,69.3,25.8]},{"n":"minecraft:jungle_log","p":{"axis":"y"},"lab":[0.5823525786399841,0.03607526421546936,0.06527465581893921],"noise":0.1060805469751358,"rgb":[155.5,112.7,76.2]},{"n":"minecraft:acacia_log","p":{"axis":"x"},"lab":[0.4988749027252197,0.003933429718017578,0.016853898763656616],"noise":0.050519298762083054,"rgb":[104.6,97.8,88.2]},{"n":"minecraft:acacia_log","p":{"axis":"y"},"lab":[0.5363414287567139,0.06972694396972656,0.07211494445800781],"noise":0.07690834254026413,"rgb":[156.7,89.4,56.5]},{"n":"minecraft:cherry_log","p":{"axis":"x"},"lab":[0.28467729687690735,0.03765670955181122,-0.008198797702789307],"noise":0.03995215520262718,"rgb":[56.2,34.1,45.4]},{"n":"minecraft:cherry_log","p":{"axis":"y"},"lab":[0.7356501221656799,0.048888713121414185,0.026343882083892822],"noise":0.23864300549030304,"rgb":[202.3,156.8,149.9]},{"n":"minecraft:dark_oak_log","p":{"axis":"x"},"lab":[0.3173094093799591,0.009439550340175629,0.03792010247707367],"noise":0.037659455090761185,"rgb":[61.6,47.4,26.7]},{"n":"minecraft:dark_oak_log","p":{"axis":"y"},"lab":[0.32142695784568787,0.02113165706396103,0.04426993429660797],"noise":0.030641721561551094,"rgb":[68.6,45.6,22.7]},{"n":"minecraft:pale_oak_log","p":{"axis":"y"},"lab":[0.8420358896255493,0.008777827024459839,0.004383981227874756],"noise":0.2023783177137375,"rgb":[209.5,200.8,199.7]},{"n":"minecraft:mangrove_log","p":{"axis":"x"},"lab":[0.39642366766929626,0.010036870837211609,0.04526439309120178],"noise":0.04015254229307175,"rgb":[84.7,67.6,41.4]},{"n":"minecraft:mangrove_log","p":{"axis":"y"},"lab":[0.38931769132614136,0.06693272292613983,0.03893113136291504],"noise":0.050207823514938354,"rgb":[104.1,51.3,43.1]},{"n":"minecraft:poplar_log","p":{"axis":"x"},"lab":[0.3771423101425171,0.016282692551612854,0.03635159134864807],"noise":0.0349617674946785,"rgb":[80.3,61.5,42.7]},{"n":"minecraft:poplar_log","p":{"axis":"y"},"lab":[0.6091490983963013,0.01000949740409851,0.019958972930908203],"noise":0.12337207049131393,"rgb":[140.9,128.4,117.4]},{"n":"minecraft:muddy_mangrove_roots","p":{"axis":"x"},"lab":[0.36172789335250854,0.0090055912733078,0.019284218549728394],"noise":0.04058896377682686,"rgb":[69.6,59.4,50.0]},{"n":"minecraft:muddy_mangrove_roots","p":{"axis":"y"},"lab":[0.36285972595214844,0.00961543619632721,0.025329947471618652],"noise":0.042487964034080505,"rgb":[71.4,59.5,46.5]},{"n":"minecraft:bamboo_block","p":{"axis":"x"},"lab":[0.6304453015327454,-0.056346505880355835,0.10100597143173218],"noise":0.08236655592918396,"rgb":[129.6,146.9,58.5]},{"n":"minecraft:bamboo_block","p":{"axis":"y"},"lab":[0.6410488486289978,-0.03452803194522858,0.09630745649337769],"noise":0.10437297075986862,"rgb":[144.6,145.7,66.6]},{"n":"minecraft:stripped_spruce_log","p":{"axis":"x"},"lab":[0.485952764749527,0.016235262155532837,0.061456769704818726],"noise":0.02594044804573059,"rgb":[116.4,90.1,52.6]},{"n":"minecraft:stripped_spruce_log","p":{"axis":"y"},"lab":[0.4769555330276489,0.01812058687210083,0.060634732246398926],"noise":0.034870754927396774,"rgb":[114.4,87.2,50.7]},{"n":"minecraft:stripped_birch_log","p":{"axis":"x"},"lab":[0.7632254362106323,-0.0005938708782196045,0.07936400175094604],"noise":0.03463951498270035,"rgb":[197.3,176.5,118.9]},{"n":"minecraft:stripped_birch_log","p":{"axis":"y"},"lab":[0.7509073615074158,-0.0015359222888946533,0.07651346921920776],"noise":0.055442508310079575,"rgb":[192.1,173.0,117.5]},{"n":"minecraft:stripped_jungle_log","p":{"axis":"x"},"lab":[0.6435657143592834,0.02603568136692047,0.07584932446479797],"noise":0.03143668919801712,"rgb":[172.2,133.0,85.3]},{"n":"minecraft:stripped_jungle_log","p":{"axis":"y"},"lab":[0.6177521347999573,0.03387504816055298,0.06963309645652771],"noise":0.037538766860961914,"rgb":[166.5,123.5,82.9]},{"n":"minecraft:stripped_acacia_log","p":{"axis":"x"},"lab":[0.5686183571815491,0.08680117130279541,0.07834437489509583],"noise":0.023775456473231316,"rgb":[175.2,93.0,59.8]},{"n":"minecraft:stripped_acacia_log","p":{"axis":"y"},"lab":[0.5531020760536194,0.07704001665115356,0.08199495077133179],"noise":0.033372264355421066,"rgb":[166.9,91.3,51.9]},{"n":"minecraft:stripped_cherry_log","p":{"axis":"x"},"lab":[0.728340208530426,0.08175477385520935,0.02281951904296875],"noise":0.021772736683487892,"rgb":[215.2,145.4,149.4]},{"n":"minecraft:stripped_cherry_log","p":{"axis":"y"},"lab":[0.7766903042793274,0.05841270089149475,0.030118882656097412],"noise":0.06543804705142975,"rgb":[221.4,166.9,159.6]},{"n":"minecraft:stripped_dark_oak_log","p":{"axis":"x"},"lab":[0.35681378841400146,0.011577874422073364,0.038576602935791016],"noise":0.01998629979789257,"rgb":[73.2,57.1,36.1]},{"n":"minecraft:stripped_dark_oak_log","p":{"axis":"y"},"lab":[0.3167307674884796,0.020966649055480957,0.042345598340034485],"noise":0.0284483153373003,"rgb":[66.9,44.6,23.0]},{"n":"minecraft:stripped_pale_oak_log","p":{"axis":"x"},"lab":[0.9559375047683716,0.007289260625839233,0.0040313005447387695],"noise":0.02690947987139225,"rgb":[246.0,238.4,237.2]},{"n":"minecraft:stripped_pale_oak_log","p":{"axis":"y"},"lab":[0.9243544936180115,0.008019834756851196,0.004268348217010498],"noise":0.053507182747125626,"rgb":[236.0,227.8,226.5]},{"n":"minecraft:stripped_oak_log","p":{"axis":"x"},"lab":[0.6739168167114258,0.01445499062538147,0.0848284363746643],"noise":0.04114494100213051,"rgb":[178.1,144.8,86.7]},{"n":"minecraft:stripped_oak_log","p":{"axis":"y"},"lab":[0.6278834939002991,0.013982713222503662,0.07853677868843079],"noise":0.06358517706394196,"rgb":[162.0,131.2,78.6]},{"n":"minecraft:stripped_mangrove_log","p":{"axis":"x"},"lab":[0.42056989669799805,0.08174079656600952,0.04297870397567749],"noise":0.017921099439263344,"rgb":[119.6,54.8,48.0]},{"n":"minecraft:stripped_mangrove_log","p":{"axis":"y"},"lab":[0.38721856474876404,0.08534806966781616,0.036331504583358765],"noise":0.032664570957422256,"rgb":[109.5,44.7,44.0]},{"n":"minecraft:stripped_poplar_log","p":{"axis":"x"},"lab":[0.6884196400642395,0.008064448833465576,0.022086381912231445],"noise":0.01595119945704937,"rgb":[164.6,152.7,139.6]},{"n":"minecraft:stripped_poplar_log","p":{"axis":"y"},"lab":[0.6479582786560059,0.009645968675613403,0.01880931854248047],"noise":0.03993496671319008,"rgb":[152.3,140.0,129.7]},{"n":"minecraft:stripped_bamboo_block","p":{"axis":"x"},"lab":[0.7544485926628113,-0.014414578676223755,0.11518847942352295],"noise":0.08326921612024307,"rgb":[195.9,175.5,82.2]},{"n":"minecraft:stripped_bamboo_block","p":{"axis":"y"},"lab":[0.7192267775535583,-0.012952208518981934,0.109316885471344],"noise":0.12401292473077774,"rgb":[184.0,164.3,77.1]},{"n":"minecraft:sponge","p":{},"lab":[0.7938430309295654,-0.042719751596450806,0.13282841444015503],"noise":0.06947766989469528,"rgb":[196.9,194.0,75.0]},{"n":"minecraft:wet_sponge","p":{},"lab":[0.749241828918457,-0.054956257343292236,0.12391087412834167],"noise":0.0688333809375763,"rgb":[173.0,182.8,71.0]},{"n":"minecraft:lapis_ore","p":{},"lab":[0.5825726389884949,0.0036999285221099854,-0.03958597779273987],"noise":0.11097174882888794,"rgb":[116.0,121.6,147.2]},{"n":"minecraft:deepslate_lapis_ore","p":{},"lab":[0.4913078844547272,0.0036585628986358643,-0.053623706102371216],"noise":0.11354522407054901,"rgb":[87.0,94.8,127.7]},{"n":"minecraft:lapis_block","p":{},"lab":[0.40479743480682373,-0.018144726753234863,-0.12624776363372803],"noise":0.0376850925385952,"rgb":[31.0,68.6,140.7]},{"n":"minecraft:sandstone","p":{},"lab":[0.873833179473877,-0.007286369800567627,0.05814659595489502],"noise":0.017891746014356613,"rgb":[223.9,214.3,170.5]},{"n":"minecraft:white_wool","p":{},"lab":[0.943383514881134,-0.002461761236190796,-0.0013899803161621094],"noise":0.03792625665664673,"rgb":[234.1,236.7,237.2]},{"n":"minecraft:orange_wool","p":{},"lab":[0.6992033123970032,0.11110423505306244,0.1367737054824829],"noise":0.03366757929325104,"rgb":[240.8,119.1,22.2]},{"n":"minecraft:magenta_wool","p":{},"lab":[0.5974806547164917,0.17391157150268555,-0.09634459018707275],"noise":0.03839225322008133,"rgb":[190.1,70.2,180.6]},{"n":"minecraft:light_blue_wool","p":{},"lab":[0.7106721997261047,-0.08146700263023376,-0.08468610048294067],"noise":0.0505293607711792,"rgb":[59.6,176.2,217.6]},{"n":"minecraft:yellow_wool","p":{},"lab":[0.8491747379302979,0.003201723098754883,0.1645798683166504],"noise":0.030203495174646378,"rgb":[248.8,198.4,41.5]},{"n":"minecraft:lime_wool","p":{},"lab":[0.7121711373329163,-0.1296955794095993,0.1412753164768219],"noise":0.030700204893946648,"rgb":[112.9,185.5,26.1]},{"n":"minecraft:pink_wool","p":{},"lab":[0.7585067749023438,0.11906680464744568,1.2099742889404297e-05],"noise":0.053917206823825836,"rgb":[238.1,143.6,173.4]},{"n":"minecraft:gray_wool","p":{},"lab":[0.3848969340324402,-0.005575641989707947,-0.007439851760864258],"noise":0.02325151115655899,"rgb":[63.0,68.6,71.9]},{"n":"minecraft:light_gray_wool","p":{},"lab":[0.6462808847427368,-0.0032582879066467285,0.010321617126464844],"noise":0.03217226266860962,"rgb":[142.4,142.6,135.2]},{"n":"minecraft:cyan_wool","p":{},"lab":[0.5790609121322632,-0.08769479393959045,-0.03481343388557434],"noise":0.03171607851982117,"rgb":[21.2,138.3,145.5]},{"n":"minecraft:purple_wool","p":{},"lab":[0.47239241003990173,0.12235245108604431,-0.1539447009563446],"noise":0.03666983172297478,"rgb":[122.8,43.2,173.1]},{"n":"minecraft:blue_wool","p":{},"lab":[0.40919893980026245,0.013491511344909668,-0.1585024893283844],"noise":0.02642182447016239,"rgb":[53.3,57.9,157.8]},{"n":"minecraft:brown_wool","p":{},"lab":[0.4440799355506897,0.04186621308326721,0.06087765097618103],"noise":0.029829204082489014,"rgb":[114.8,72.0,41.0]},{"n":"minecraft:green_wool","p":{},"lab":[0.502087414264679,-0.06393556296825409,0.0909828245639801],"noise":0.03784884512424469,"rgb":[85.2,110.3,27.8]},{"n":"minecraft:red_wool","p":{},"lab":[0.4711059033870697,0.14101389050483704,0.07350730895996094],"noise":0.027017371729016304,"rgb":[161.5,39.7,34.8]},{"n":"minecraft:black_wool","p":{},"lab":[0.20328129827976227,0.0014539733529090881,-0.008113637566566467],"noise":0.03434087708592415,"rgb":[21.9,22.4,26.5]},{"n":"minecraft:gold_block","p":{},"lab":[0.873166561126709,-0.011486709117889404,0.1567760705947876],"noise":0.0762864276766777,"rgb":[247.0,210.8,69.4]},{"n":"minecraft:iron_block","p":{},"lab":[0.897510290145874,9.936094284057617e-05,3.075599670410156e-05],"noise":0.05549749359488487,"rgb":[221.1,221.0,221.0]},{"n":"minecraft:bricks","p":{},"lab":[0.5594637393951416,0.057748571038246155,0.039650022983551025],"noise":0.07901383191347122,"rgb":[152.8,101.3,88.6]},{"n":"minecraft:mossy_cobblestone","p":{},"lab":[0.564724862575531,-0.01655609905719757,0.023408591747283936],"noise":0.08810476213693619,"rgb":[113.7,121.1,102.9]},{"n":"minecraft:obsidian","p":{},"lab":[0.18492236733436584,0.020210176706314087,-0.036808326840400696],"noise":0.10084544867277145,"rgb":[21.3,13.9,34.6]},{"n":"minecraft:diamond_ore","p":{},"lab":[0.6461238861083984,-0.023339420557022095,-0.0050179362297058105],"noise":0.10428210347890854,"rgb":[126.0,146.9,145.6]},{"n":"minecraft:deepslate_diamond_ore","p":{},"lab":[0.5507847666740417,-0.03344079852104187,-0.007451236248016357],"noise":0.15931308269500732,"rgb":[90.7,120.5,119.0]},{"n":"minecraft:diamond_block","p":{},"lab":[0.8758931159973145,-0.11151453852653503,-0.016937077045440674],"noise":0.07007193565368652,"rgb":[113.1,238.2,228.7]},{"n":"minecraft:crafting_table","p":{},"lab":[0.49252206087112427,0.050221383571624756,0.06793209910392761],"noise":0.16171196103096008,"rgb":[134.2,82.9,48.1]},{"n":"minecraft:snow_block","p":{},"lab":[0.99386066198349,-0.005157530307769775,-0.0015837550163269043],"noise":0.008413838222622871,"rgb":[249.1,254.2,254.2]},{"n":"minecraft:clay","p":{},"lab":[0.7267142534255981,-0.0010706782341003418,-0.02003997564315796],"noise":0.022641191259026527,"rgb":[160.9,166.6,179.8]},{"n":"minecraft:netherrack","p":{},"lab":[0.36255961656570435,0.07948184013366699,0.03261071443557739],"noise":0.05158602446317673,"rgb":[99.4,40.4,40.4]},{"n":"minecraft:soul_sand","p":{},"lab":[0.39098721742630005,0.020575180649757385,0.02654510736465454],"noise":0.06385989487171173,"rgb":[84.2,64.4,52.7]},{"n":"minecraft:soul_soil","p":{},"lab":[0.3697109818458557,0.019841566681861877,0.025570034980773926],"noise":0.051533401012420654,"rgb":[77.8,59.0,47.9]},{"n":"minecraft:basalt","p":{"axis":"x"},"lab":[0.4138946831226349,0.0034156590700149536,-0.00649493932723999],"noise":0.06201896443963051,"rgb":[75.7,74.6,79.0]},{"n":"minecraft:basalt","p":{"axis":"y"},"lab":[0.45532000064849854,0.0011708438396453857,-0.004760414361953735],"noise":0.09920252114534378,"rgb":[86.2,86.3,89.4]},{"n":"minecraft:polished_basalt","p":{"axis":"x"},"lab":[0.4758051931858063,0.0014627277851104736,-0.003027200698852539],"noise":0.08753244578838348,"rgb":[92.4,92.0,94.1]},{"n":"minecraft:polished_basalt","p":{"axis":"y"},"lab":[0.5120182037353516,0.001316174864768982,-0.0017973482608795166],"noise":0.08661362528800964,"rgb":[102.8,102.2,103.6]},{"n":"minecraft:glowstone","p":{},"lab":[0.6966949105262756,0.021678060293197632,0.06406387686729431],"noise":0.2156553566455841,"rgb":[184.3,150.8,110.8]},{"n":"minecraft:carved_pumpkin","p":{"facing":"east"},"lab":[0.650262713432312,0.06165708601474762,0.12389278411865234],"noise":0.08523095399141312,"rgb":[200.8,121.9,28.9]},{"n":"minecraft:stone_bricks","p":{},"lab":[0.585638165473938,0.001318603754043579,-0.0009030699729919434],"noise":0.06388069689273834,"rgb":[124.3,123.5,124.3]},{"n":"minecraft:mossy_stone_bricks","p":{},"lab":[0.5735416412353516,-0.011194124817848206,0.01594814658164978],"noise":0.07156732678413391,"rgb":[117.6,122.6,110.2]},{"n":"minecraft:cracked_stone_bricks","p":{},"lab":[0.571773886680603,0.0012801289558410645,-0.0008764266967773438],"noise":0.06456050276756287,"rgb":[120.3,119.5,120.3]},{"n":"minecraft:chiseled_stone_bricks","p":{},"lab":[0.5788161158561707,0.001691192388534546,-0.0011578798294067383],"noise":0.07711159437894821,"rgb":[122.5,121.4,122.5]},{"n":"minecraft:packed_mud","p":{},"lab":[0.5581578016281128,0.031642839312553406,0.051426857709884644],"noise":0.036797743290662766,"rgb":[143.1,107.4,80.2]},{"n":"minecraft:mud_bricks","p":{},"lab":[0.5497807860374451,0.030069440603256226,0.04905697703361511],"noise":0.06367195397615433,"rgb":[139.3,105.4,79.7]},{"n":"minecraft:brown_mushroom_block","p":{"down":"false","east":"false","north":"false","south":"false","up":"true","west":"false"},"lab":[0.5747050046920776,0.03227217495441437,0.0559467077255249],"noise":0.01180350687354803,"rgb":[149.4,111.9,81.5]},{"n":"minecraft:brown_mushroom_block","p":{"down":"false","east":"false","north":"false","south":"false","up":"false","west":"false"},"lab":[0.755486249923706,0.014733344316482544,0.07434678077697754],"noise":0.027551161125302315,"rgb":[201.9,170.4,120.4]},{"n":"minecraft:red_mushroom_block","p":{"down":"false","east":"false","north":"false","south":"false","up":"true","west":"false"},"lab":[0.5597317218780518,0.16338734328746796,0.07852590084075928],"noise":0.06658462435007095,"rgb":[200.8,56.8,55.5]},{"n":"minecraft:mushroom_stem","p":{"down":"false","east":"false","north":"false","south":"false","up":"true","west":"false"},"lab":[0.8249422311782837,0.0027413666248321533,0.0164492130279541],"noise":0.01993657276034355,"rgb":[203.3,196.8,185.9]},{"n":"minecraft:melon","p":{},"lab":[0.6196428537368774,-0.07466444373130798,0.11778849363327026],"noise":0.08440355211496353,"rgb":[119.7,146.6,30.7]},{"n":"minecraft:mycelium","p":{"snowy":"false"},"lab":[0.5124049782752991,0.017228856682777405,0.000721365213394165],"noise":0.028341226279735565,"rgb":[111.9,98.8,101.8]},{"n":"minecraft:resin_block","p":{},"lab":[0.6461877822875977,0.10917757451534271,0.12187883257865906],"noise":0.08038298785686493,"rgb":[218.6,104.7,29.8]},{"n":"minecraft:resin_bricks","p":{},"lab":[0.6164582371711731,0.11122697591781616,0.11567309498786926],"noise":0.08955635130405426,"rgb":[207.9,95.2,28.3]},{"n":"minecraft:chiseled_resin_bricks","p":{},"lab":[0.6035390496253967,0.11170096695423126,0.11262118816375732],"noise":0.09227072447538376,"rgb":[203.1,91.4,28.4]},{"n":"minecraft:nether_bricks","p":{},"lab":[0.2384057193994522,0.03845982253551483,0.005795598030090332],"noise":0.040917228907346725,"rgb":[46.5,22.7,27.1]},{"n":"minecraft:end_stone","p":{},"lab":[0.8883523344993591,-0.02983146905899048,0.07819855213165283],"noise":0.05444484204053879,"rgb":[220.1,224.0,159.5]},{"n":"minecraft:redstone_lamp","p":{"lit":"false"},"lab":[0.41211453080177307,0.04721681773662567,0.059559136629104614],"noise":0.13043370842933655,"rgb":[107.1,61.9,33.2]},{"n":"minecraft:emerald_ore","p":{},"lab":[0.6239450573921204,-0.035640716552734375,0.020473003387451172],"noise":0.12301668524742126,"rgb":[118.2,142.7,122.5]},{"n":"minecraft:deepslate_emerald_ore","p":{},"lab":[0.5421181321144104,-0.04432070255279541,0.02400416135787964],"noise":0.17242319881916046,"rgb":[89.6,120.0,96.7]},{"n":"minecraft:emerald_block","p":{},"lab":[0.7519940733909607,-0.16489484906196594,0.10132050514221191],"noise":0.09526316821575165,"rgb":[56.7,206.4,99.2]},{"n":"minecraft:nether_quartz_ore","p":{},"lab":[0.5041749477386475,0.043970316648483276,0.02488139271736145],"noise":0.18208985030651093,"rgb":[126.9,89.7,83.6]},{"n":"minecraft:quartz_block","p":{},"lab":[0.9276115298271179,0.003491133451461792,0.010588288307189941],"noise":0.017893953248858452,"rgb":[235.9,230.0,223.2]},{"n":"minecraft:chiseled_quartz_block","p":{},"lab":[0.9164831638336182,0.0017149746417999268,0.013276398181915283],"noise":0.026116928085684776,"rgb":[231.8,226.8,217.6]},{"n":"minecraft:quartz_pillar","p":{"axis":"x"},"lab":[0.929360568523407,0.002493441104888916,0.009782135486602783],"noise":0.02193010039627552,"rgb":[235.6,230.8,224.4]},{"n":"minecraft:quartz_pillar","p":{"axis":"y"},"lab":[0.9270523190498352,0.0029280781745910645,0.010186910629272461],"noise":0.021910084411501884,"rgb":[235.2,229.9,223.3]},{"n":"minecraft:white_terracotta","p":{},"lab":[0.7868629097938538,0.02822977304458618,0.033103764057159424],"noise":0.007295644376426935,"rgb":[209.6,178.1,161.4]},{"n":"minecraft:orange_terracotta","p":{},"lab":[0.5312439203262329,0.07838253676891327,0.08876779675483704],"noise":0.007434622384607792,"rgb":[161.6,83.9,37.7]},{"n":"minecraft:magenta_terracotta","p":{},"lab":[0.5369942784309387,0.08494548499584198,-0.001652747392654419],"noise":0.00781262293457985,"rgb":[149.7,88.1,108.7]},{"n":"minecraft:light_blue_terracotta","p":{},"lab":[0.5485121607780457,0.017514348030090332,-0.042170584201812744],"noise":0.005280669312924147,"rgb":[113.5,108.5,138.0]},{"n":"minecraft:yellow_terracotta","p":{},"lab":[0.654055655002594,0.027108222246170044,0.12203836441040039],"noise":0.0074781691655516624,"rgb":[186.3,133.2,35.4]},{"n":"minecraft:lime_terracotta","p":{},"lab":[0.5380525588989258,-0.045205965638160706,0.07906746864318848],"noise":0.007488179951906204,"rgb":[103.6,117.7,52.8]},{"n":"minecraft:pink_terracotta","p":{},"lab":[0.5291847586631775,0.10354864597320557,0.04032203555107117],"noise":0.007735517807304859,"rgb":[162.0,78.3,78.7]},{"n":"minecraft:gray_terracotta","p":{},"lab":[0.3024232089519501,0.018319301307201385,0.01845632493495941],"noise":0.004489211365580559,"rgb":[57.8,42.4,35.6]},{"n":"minecraft:light_gray_terracotta","p":{},"lab":[0.5526307225227356,0.030433103442192078,0.02472934126853943],"noise":0.0056417398154735565,"rgb":[135.3,106.9,97.5]},{"n":"minecraft:cyan_terracotta","p":{},"lab":[0.4674800932407379,-0.005219355225563049,-0.0015708506107330322],"noise":0.007151196710765362,"rgb":[86.7,91.0,91.0]},{"n":"minecraft:purple_terracotta","p":{},"lab":[0.4566993713378906,0.06912755966186523,-0.0011440813541412354],"noise":0.008151495829224586,"rgb":[118.5,70.3,86.1]},{"n":"minecraft:blue_terracotta","p":{},"lab":[0.38389959931373596,0.03186163306236267,-0.045121967792510986],"noise":0.005507259629666805,"rgb":[74.3,59.7,91.1]},{"n":"minecraft:brown_terracotta","p":{},"lab":[0.34841907024383545,0.028397977352142334,0.03564196825027466],"noise":0.005608402192592621,"rgb":[77.2,51.2,35.7]},{"n":"minecraft:green_terracotta","p":{},"lab":[0.4262552559375763,-0.02854885160923004,0.055093973875045776],"noise":0.005155262071639299,"rgb":[76.0,83.3,42.4]},{"n":"minecraft:red_terracotta","p":{},"lab":[0.46754851937294006,0.09769181907176971,0.0601746141910553],"noise":0.007501021958887577,"rgb":[143.1,61.1,46.9]},{"n":"minecraft:black_terracotta","p":{},"lab":[0.22083397209644318,0.018712908029556274,0.018721237778663635],"noise":0.004131269175559282,"rgb":[37.2,22.8,16.4]},{"n":"minecraft:prismarine","p":{},"lab":[0.6660152077674866,-0.05718415975570679,-0.008920729160308838],"noise":0.10266021639108658,"rgb":[105.5,159.9,155.1]},{"n":"minecraft:prismarine_bricks","p":{},"lab":[0.698509931564331,-0.07420721650123596,-0.002373635768890381],"noise":0.07237676531076431,"rgb":[102.4,173.4,161.2]},{"n":"minecraft:dark_prismarine","p":{},"lab":[0.44949913024902344,-0.05404677987098694,0.012798428535461426],"noise":0.0753406435251236,"rgb":[52.6,95.1,78.4]},{"n":"minecraft:sea_lantern","p":{},"lab":[0.8307536840438843,-0.02518177032470703,0.005410194396972656],"noise":0.1472691297531128,"rgb":[184.4,205.2,196.2]},{"n":"minecraft:hay_block","p":{"axis":"x"},"lab":[0.6513109803199768,-0.007411286234855652,0.11989319324493408],"noise":0.09422095865011215,"rgb":[168.2,141.3,39.0]},{"n":"minecraft:hay_block","p":{"axis":"y"},"lab":[0.6481735706329346,-0.011697053909301758,0.12988990545272827],"noise":0.06281939893960953,"rgb":[167.5,140.8,12.8]},{"n":"minecraft:terracotta","p":{},"lab":[0.5405285954475403,0.0607743114233017,0.060423195362091064],"noise":0.006253233645111322,"rgb":[152.2,94.0,67.7]},{"n":"minecraft:coal_block","p":{},"lab":[0.17974701523780823,0.00027920305728912354,8.633732795715332e-05],"noise":0.04239575192332268,"rgb":[17.6,17.4,17.4]},{"n":"minecraft:packed_ice","p":{},"lab":[0.7709981799125671,-0.014772146940231323,-0.10818886756896973],"noise":0.03700484335422516,"rgb":[142.6,180.5,250.5]},{"n":"minecraft:red_sandstone","p":{},"lab":[0.5829161405563354,0.07745049893856049,0.10632553696632385],"noise":0.020567016676068306,"rgb":[181.5,98.0,31.7]},{"n":"minecraft:smooth_stone","p":{},"lab":[0.7056424617767334,-5.960464477539063e-08,5.960464477539063e-08],"noise":0.05963488668203354,"rgb":[160.0,160.0,160.0]},{"n":"minecraft:smooth_quartz","p":{},"lab":[0.9294337630271912,0.004243075847625732,0.010288000106811523],"noise":0.009608574211597443,"rgb":[236.9,230.4,224.0]},{"n":"minecraft:purpur_block","p":{},"lab":[0.6554052233695984,0.06639128923416138,-0.043770551681518555],"noise":0.059358298778533936,"rgb":[170.9,127.8,170.6]},{"n":"minecraft:purpur_pillar","p":{"axis":"x"},"lab":[0.6655968427658081,0.06325963139533997,-0.04183727502822876],"noise":0.06559092551469803,"rgb":[172.9,131.7,172.7]},{"n":"minecraft:purpur_pillar","p":{"axis":"y"},"lab":[0.6623724102973938,0.06519991159439087,-0.042948901653289795],"noise":0.05839294195175171,"rgb":[172.6,130.2,172.4]},{"n":"minecraft:end_stone_bricks","p":{},"lab":[0.8927978873252869,-0.03147435188293457,0.07460689544677734],"noise":0.07455740123987198,"rgb":[219.5,226.0,163.9]},{"n":"minecraft:nether_wart_block","p":{},"lab":[0.35487794876098633,0.12459345906972885,0.0689498633146286],"noise":0.04578489437699318,"rgb":[116.7,3.7,3.0]},{"n":"minecraft:red_nether_bricks","p":{},"lab":[0.26504048705101013,0.08675576746463776,0.04071691632270813],"noise":0.060012154281139374,"rgb":[73.5,7.7,10.2]},{"n":"minecraft:bone_block","p":{"axis":"x"},"lab":[0.9105842709541321,-0.0033217668533325195,0.024186670780181885],"noise":0.014000603929162025,"rgb":[229.5,226.0,207.9]},{"n":"minecraft:bone_block","p":{"axis":"y"},"lab":[0.8499041199684143,-0.006664782762527466,0.03498750925064087],"noise":0.0448337085545063,"rgb":[210.4,206.9,180.6]},{"n":"minecraft:white_glazed_terracotta","p":{"facing":"east"},"lab":[0.885823130607605,-0.007953882217407227,0.00298994779586792],"noise":0.1855713278055191,"rgb":[212.9,219.1,215.3]},{"n":"minecraft:orange_glazed_terracotta","p":{"facing":"east"},"lab":[0.7164032459259033,0.03337365388870239,0.05027812719345093],"noise":0.16181084513664246,"rgb":[193.4,154.3,127.1]},{"n":"minecraft:magenta_glazed_terracotta","p":{"facing":"east"},"lab":[0.6826720237731934,0.14256104826927185,-0.06949186325073242],"noise":0.11270196735858917,"rgb":[210.1,111.6,193.0]},{"n":"minecraft:light_blue_glazed_terracotta","p":{"facing":"east"},"lab":[0.7460471391677856,-0.03902837634086609,-0.06001359224319458],"noise":0.21187932789325714,"rgb":[129.0,180.1,212.6]},{"n":"minecraft:yellow_glazed_terracotta","p":{"facing":"east"},"lab":[0.8438540101051331,0.00879707932472229,0.11311852931976318],"noise":0.1294211447238922,"rgb":[237.2,198.4,112.9]},{"n":"minecraft:lime_glazed_terracotta","p":{"facing":"east"},"lab":[0.7921579480171204,-0.07210478186607361,0.12995171546936035],"noise":0.11872938275337219,"rgb":[177.1,200.2,78.8]},{"n":"minecraft:pink_glazed_terracotta","p":{"facing":"east"},"lab":[0.7835909128189087,0.09674710035324097,-0.002062499523162842],"noise":0.07486528903245926,"rgb":[235.9,158.5,183.3]},{"n":"minecraft:gray_glazed_terracotta","p":{"facing":"east"},"lab":[0.48997512459754944,-0.006662353873252869,-0.0065843164920806885],"noise":0.12140995264053345,"rgb":[91.0,97.6,100.4]},{"n":"minecraft:light_gray_glazed_terracotta","p":{"facing":"east"},"lab":[0.7349019646644592,-0.0126151442527771,-0.006288647651672363],"noise":0.13983498513698578,"rgb":[159.6,171.9,173.6]},{"n":"minecraft:cyan_glazed_terracotta","p":{"facing":"east"},"lab":[0.5739866495132446,-0.0509609580039978,-0.02330160140991211],"noise":0.16490216553211212,"rgb":[78.7,130.4,136.1]},{"n":"minecraft:purple_glazed_terracotta","p":{"facing":"east"},"lab":[0.46887150406837463,0.1098325252532959,-0.1402083933353424],"noise":0.12942615151405334,"rgb":[118.3,50.7,165.0]},{"n":"minecraft:blue_glazed_terracotta","p":{"facing":"east"},"lab":[0.44015178084373474,-0.007866829633712769,-0.12861433625221252],"noise":0.14221292734146118,"rgb":[49.5,76.5,152.8]},{"n":"minecraft:brown_glazed_terracotta","p":{"facing":"east"},"lab":[0.562431812286377,0.02683466672897339,0.030706197023391724],"noise":0.11989937722682953,"rgb":[137.7,110.5,96.3]},{"n":"minecraft:green_glazed_terracotta","p":{"facing":"east"},"lab":[0.6406036019325256,-0.046084582805633545,0.05896821618080139],"noise":0.15195751190185547,"rgb":[127.1,149.3,99.8]},{"n":"minecraft:red_glazed_terracotta","p":{"facing":"east"},"lab":[0.5431333184242249,0.1366608738899231,0.07009416818618774],"noise":0.07914934307336807,"rgb":[184.0,66.6,58.9]},{"n":"minecraft:black_glazed_terracotta","p":{"facing":"east"},"lab":[0.33292338252067566,0.07761693000793457,0.02790483832359314],"noise":0.15424472093582153,"rgb":[89.1,33.4,36.1]},{"n":"minecraft:white_concrete","p":{},"lab":[0.8689428567886353,-0.005841493606567383,-0.0032108426094055176],"noise":0.002502249786630273,"rgb":[207.1,213.1,214.1]},{"n":"minecraft:orange_concrete","p":{},"lab":[0.6428501009941101,0.1229834258556366,0.1298971176147461],"noise":0.0026941935066133738,"rgb":[224.3,97.1,0.6]},{"n":"minecraft:magenta_concrete","p":{},"lab":[0.5342515110969543,0.17405995726585388,-0.09427997469902039],"noise":0.0027780593372881413,"rgb":[169.2,48.5,159.2]},{"n":"minecraft:light_blue_concrete","p":{},"lab":[0.6036617755889893,-0.06156983971595764,-0.11343371868133545],"noise":0.0028864340856671333,"rgb":[35.6,137.0,198.9]},{"n":"minecraft:yellow_concrete","p":{},"lab":[0.7961448431015015,0.025794684886932373,0.15889480710029602],"noise":0.00307114003226161,"rgb":[241.0,175.4,21.5]},{"n":"minecraft:lime_concrete","p":{},"lab":[0.6599136590957642,-0.12768608331680298,0.13026711344718933],"noise":0.003365543205291033,"rgb":[94.1,168.8,24.5]},{"n":"minecraft:pink_concrete","p":{},"lab":[0.6534388661384583,0.14768537878990173,-0.0037642717361450195],"noise":0.002620149403810501,"rgb":[213.5,101.0,142.9]},{"n":"minecraft:gray_concrete","p":{},"lab":[0.34561216831207275,-0.0020186007022857666,-0.007832080125808716],"noise":0.002062832238152623,"rgb":[54.6,57.6,61.6]},{"n":"minecraft:light_gray_concrete","p":{},"lab":[0.5867989659309387,-0.004317760467529297,0.014255702495574951],"noise":0.002473527332767844,"rgb":[125.0,125.0,115.0]},{"n":"minecraft:cyan_concrete","p":{},"lab":[0.5255995988845825,-0.07272496819496155,-0.047080785036087036],"noise":0.002281422261148691,"rgb":[21.5,119.2,136.2]},{"n":"minecraft:purple_concrete","p":{},"lab":[0.4187089800834656,0.10481467843055725,-0.15464189648628235],"noise":0.0020519422832876444,"rgb":[100.4,31.6,156.4]},{"n":"minecraft:blue_concrete","p":{},"lab":[0.3697960078716278,0.013025134801864624,-0.15521210432052612],"noise":0.002050984650850296,"rgb":[44.5,46.5,143.4]},{"n":"minecraft:brown_concrete","p":{},"lab":[0.3919638395309448,0.036820188164711,0.055408775806427],"noise":0.00209177378565073,"rgb":[96.5,59.5,31.6]},{"n":"minecraft:green_concrete","p":{},"lab":[0.44413983821868896,-0.04697524011135101,0.0676528811454773],"noise":0.0023363016080111265,"rgb":[73.4,91.3,36.5]},{"n":"minecraft:red_concrete","p":{},"lab":[0.42908623814582825,0.13090014457702637,0.06338214874267578],"noise":0.0023297725711017847,"rgb":[142.4,32.8,32.8]},{"n":"minecraft:black_concrete","p":{},"lab":[0.14697054028511047,-0.0005785077810287476,-0.011417455971240997],"noise":0.0049233147874474525,"rgb":[8.4,10.4,15.4]},{"n":"minecraft:dried_kelp_block","p":{},"lab":[0.3812168836593628,-0.015071794390678406,0.025937050580978394],"noise":0.13448938727378845,"rgb":[64.4,69.2,51.3]},{"n":"minecraft:dead_tube_coral_block","p":{},"lab":[0.5964689254760742,0.0068326592445373535,0.007970690727233887],"noise":0.07169762998819351,"rgb":[132.7,125.4,121.7]},{"n":"minecraft:dead_brain_coral_block","p":{},"lab":[0.577613115310669,0.006492942571640015,0.007749199867248535],"noise":0.07426964491605759,"rgb":[126.8,120.0,116.3]},{"n":"minecraft:dead_bubble_coral_block","p":{},"lab":[0.5970218777656555,0.007580608129501343,0.009019523859024048],"noise":0.06469886004924774,"rgb":[133.5,125.4,121.2]},{"n":"minecraft:dead_fire_coral_block","p":{},"lab":[0.5973377227783203,0.007230550050735474,0.008777350187301636],"noise":0.06477926671504974,"rgb":[133.3,125.6,121.4]},{"n":"minecraft:dead_horn_coral_block","p":{},"lab":[0.6082108616828918,0.006413102149963379,0.00827556848526001],"noise":0.0796666294336319,"rgb":[136.0,129.0,125.0]},{"n":"minecraft:blue_ice","p":{},"lab":[0.7318939566612244,-0.023016124963760376,-0.13363319635391235],"noise":0.03201550990343094,"rgb":[117.2,168.0,253.0]},{"n":"minecraft:loom","p":{"facing":"east"},"lab":[0.6256260871887207,0.017377078533172607,0.04025164246559143],"noise":0.1835509091615677,"rgb":[154.4,131.1,108.0]},{"n":"minecraft:cartography_table","p":{},"lab":[0.5760074257850647,0.010040342807769775,0.01615843176841736],"noise":0.27002325654029846,"rgb":[130.2,118.6,110.3]},{"n":"minecraft:fletching_table","p":{},"lab":[0.7838502526283264,9.85860824584961e-05,0.06114381551742554],"noise":0.09716371446847916,"rgb":[199.8,183.5,140.0]},{"n":"minecraft:smithing_table","p":{},"lab":[0.36007654666900635,0.0038962066173553467,-0.022305727005004883],"noise":0.04477505385875702,"rgb":[58.5,60.0,73.1]},{"n":"minecraft:warped_stem","p":{"axis":"x"},"lab":[0.38671913743019104,-0.0005655139684677124,-0.022608816623687744],"noise":0.10045663267374039,"rgb":[63.0,67.9,80.6]},{"n":"minecraft:warped_stem","p":{"axis":"y"},"lab":[0.5199329853057861,-0.062104612588882446,-0.014324396848678589],"noise":0.11249203979969025,"rgb":[54.9,116.6,114.9]},{"n":"minecraft:stripped_warped_stem","p":{"axis":"x"},"lab":[0.6219808459281921,-0.0849161148071289,-0.01834702491760254],"noise":0.030824337154626846,"rgb":[58.1,151.3,148.3]},{"n":"minecraft:stripped_warped_stem","p":{"axis":"y"},"lab":[0.559655487537384,-0.07470166683197021,-0.014441490173339844],"noise":0.06061282381415367,"rgb":[52.6,130.6,126.9]},{"n":"minecraft:warped_nylium","p":{},"lab":[0.5159340500831604,-0.07079555094242096,0.001514345407485962],"noise":0.07512812316417694,"rgb":[50.8,117.1,104.3]},{"n":"minecraft:warped_wart_block","p":{},"lab":[0.5264347195625305,-0.08110377192497253,-0.02258211374282837],"noise":0.055985063314437866,"rgb":[22.9,121.6,122.2]},{"n":"minecraft:crimson_stem","p":{"axis":"x"},"lab":[0.34069767594337463,0.09519530832767487,0.029958561062812805],"noise":0.06477063149213791,"rgb":[97.5,28.2,36.3]},{"n":"minecraft:crimson_stem","p":{"axis":"y"},"lab":[0.41679757833480835,0.0942438393831253,-0.000628739595413208],"noise":0.06710577756166458,"rgb":[116.0,51.5,74.4]},{"n":"minecraft:stripped_crimson_stem","p":{"axis":"x"},"lab":[0.4651264548301697,0.11509369313716888,-0.006245404481887817],"noise":0.026810264214873314,"rgb":[137.8,57.6,90.4]},{"n":"minecraft:stripped_crimson_stem","p":{"axis":"y"},"lab":[0.4388834536075592,0.09748914837837219,-0.005668342113494873],"noise":0.04054981842637062,"rgb":[123.2,56.6,83.2]},{"n":"minecraft:crimson_nylium","p":{},"lab":[0.41796526312828064,0.11810179054737091,0.05439257621765137],"noise":0.05629471689462662,"rgb":[133.1,37.9,37.9]},{"n":"minecraft:shroomlight","p":{},"lab":[0.7678766250610352,0.07242169976234436,0.10702657699584961],"noise":0.11971806734800339,"rgb":[241.8,156.5,93.3]},{"n":"minecraft:crimson_planks","p":{},"lab":[0.3966478407382965,0.08262941241264343,-0.006466418504714966],"noise":0.06528850644826889,"rgb":[104.7,50.0,72.6]},{"n":"minecraft:warped_planks","p":{},"lab":[0.4931400418281555,-0.06517009437084198,-0.009551644325256348],"noise":0.09535441547632217,"rgb":[45.1,109.4,104.4]},{"n":"minecraft:target","p":{},"lab":[0.8360067009925842,0.0325295627117157,0.03155016899108887],"noise":0.1978428065776825,"rgb":[227.8,192.6,177.7]},{"n":"minecraft:honeycomb_block","p":{},"lab":[0.7476460337638855,0.04936721920967102,0.13582494854927063],"noise":0.10325738787651062,"rgb":[230.6,154.9,50.6]},{"n":"minecraft:netherite_block","p":{},"lab":[0.37572598457336426,0.0072123706340789795,-0.002327561378479004],"noise":0.06010103598237038,"rgb":[68.2,63.7,66.3]},{"n":"minecraft:ancient_debris","p":{},"lab":[0.4525052309036255,0.02633817493915558,0.019652903079986572],"noise":0.15028397738933563,"rgb":[102.8,79.8,73.2]},{"n":"minecraft:crying_obsidian","p":{},"lab":[0.2736198306083679,0.05839422345161438,-0.11354632675647736],"noise":0.17387062311172485,"rgb":[48.6,13.2,92.2]},{"n":"minecraft:lodestone","p":{},"lab":[0.677757978439331,-0.0010346174240112305,-0.006873011589050293],"noise":0.08041340112686157,"rgb":[149.1,151.6,155.9]},{"n":"minecraft:blackstone","p":{},"lab":[0.28284361958503723,0.010561257600784302,-0.010541826486587524],"noise":0.06405923515558243,"rgb":[44.4,39.4,46.7]},{"n":"minecraft:polished_blackstone","p":{},"lab":[0.3290330171585083,0.009677648544311523,-0.013887494802474976],"noise":0.060975007712841034,"rgb":[55.0,51.1,60.3]},{"n":"minecraft:polished_blackstone_bricks","p":{},"lab":[0.30949684977531433,0.010441303253173828,-0.012612015008926392],"noise":0.07051967829465866,"rgb":[50.6,46.0,54.6]},{"n":"minecraft:cracked_polished_blackstone_bricks","p":{},"lab":[0.2937767803668976,0.010770425200462341,-0.011041790246963501],"noise":0.0774012953042984,"rgb":[47.1,42.1,49.7]},{"n":"minecraft:chiseled_polished_blackstone","p":{},"lab":[0.33600711822509766,0.00960424542427063,-0.013051778078079224],"noise":0.07994922995567322,"rgb":[56.9,52.9,61.7]},{"n":"minecraft:gilded_blackstone","p":{},"lab":[0.3549047112464905,0.01712609827518463,0.02512383460998535],"noise":0.1391410529613495,"rgb":[72.5,55.8,44.5]},{"n":"minecraft:chiseled_nether_bricks","p":{},"lab":[0.2451302409172058,0.039431385695934296,0.005834922194480896],"noise":0.04764353111386299,"rgb":[48.6,24.0,28.6]},{"n":"minecraft:cracked_nether_bricks","p":{},"lab":[0.22826886177062988,0.036050885915756226,0.005235850811004639],"noise":0.04382772371172905,"rgb":[43.0,21.0,25.1]},{"n":"minecraft:quartz_bricks","p":{},"lab":[0.9251463413238525,0.0029828250408172607,0.011003673076629639],"noise":0.021646002307534218,"rgb":[234.8,229.3,222.1]},{"n":"minecraft:amethyst_block","p":{},"lab":[0.5919599533081055,0.07104068994522095,-0.11870467662811279],"noise":0.10816037654876709,"rgb":[140.3,103.6,194.4]},{"n":"minecraft:tuff","p":{},"lab":[0.540517270565033,-0.0036365538835525513,0.008559256792068481],"noise":0.07165425270795822,"rgb":[110.6,111.4,105.4]},{"n":"minecraft:polished_tuff","p":{},"lab":[0.5141677260398865,-0.009069055318832397,0.0037531256675720215],"noise":0.04513579234480858,"rgb":[98.8,105.0,101.0]},{"n":"minecraft:chiseled_tuff","p":{},"lab":[0.5004021525382996,-0.00797879695892334,0.00885656476020813],"noise":0.07090968638658524,"rgb":[96.8,100.8,93.9]},{"n":"minecraft:tuff_bricks","p":{},"lab":[0.5161028504371643,-0.007429763674736023,0.008802413940429688],"noise":0.07785893976688385,"rgb":[101.5,105.2,98.3]},{"n":"minecraft:chiseled_tuff_bricks","p":{},"lab":[0.5523964166641235,-0.005954056978225708,0.009611755609512329],"noise":0.058646395802497864,"rgb":[113.0,115.3,108.1]},{"n":"minecraft:sulfur","p":{},"lab":[0.7537687420845032,-0.015203714370727539,0.09525847434997559],"noise":0.04871297627687454,"rgb":[190.1,176.4,102.2]},{"n":"minecraft:potent_sulfur","p":{},"lab":[0.8407350182533264,-0.041096508502960205,0.12754857540130615],"noise":0.0332074910402298,"rgb":[211.5,209.1,97.7]},{"n":"minecraft:polished_sulfur","p":{},"lab":[0.7444302439689636,-0.015294969081878662,0.10294324159622192],"noise":0.08083231002092361,"rgb":[189.1,173.1,91.9]},{"n":"minecraft:sulfur_bricks","p":{},"lab":[0.7396246194839478,-0.013771206140518188,0.10131770372390747],"noise":0.09132745862007141,"rgb":[188.0,171.3,92.0]},{"n":"minecraft:chiseled_sulfur","p":{},"lab":[0.7452577948570251,-0.016685515642166138,0.10287529230117798],"noise":0.09625212848186493,"rgb":[188.6,173.7,92.3]},{"n":"minecraft:cinnabar","p":{},"lab":[0.5264502167701721,0.08499257266521454,0.03807872533798218],"noise":0.05122486874461174,"rgb":[153.4,83.8,79.9]},{"n":"minecraft:polished_cinnabar","p":{},"lab":[0.4858230948448181,0.1164931058883667,0.05322468280792236],"noise":0.060819774866104126,"rgb":[154.7,59.6,57.1]},{"n":"minecraft:cinnabar_bricks","p":{},"lab":[0.476719468832016,0.11432503163814545,0.05185854434967041],"noise":0.06490743160247803,"rgb":[150.7,57.9,55.7]},{"n":"minecraft:chiseled_cinnabar","p":{},"lab":[0.4771598279476166,0.11402514576911926,0.04917573928833008],"noise":0.07705366611480713,"rgb":[150.3,58.4,57.9]},{"n":"minecraft:calcite","p":{},"lab":[0.9095714688301086,-0.002479374408721924,0.004494607448577881],"noise":0.05909678339958191,"rgb":[224.5,225.5,221.8]},{"n":"minecraft:sculk","p":{},"lab":[0.2570388615131378,-0.027767926454544067,-0.01841863989830017],"noise":0.08739577978849411,"rgb":[13.4,39.5,45.0]},{"n":"minecraft:waxed_copper_block","p":{},"lab":[0.6252444386482239,0.09035404026508331,0.07216408848762512],"noise":0.06310903280973434,"rgb":[194.3,109.2,81.7]},{"n":"minecraft:waxed_exposed_copper","p":{},"lab":[0.6248769164085388,0.03486257791519165,0.04350033402442932],"noise":0.056618668138980865,"rgb":[163.6,126.4,105.1]},{"n":"minecraft:waxed_weathered_copper","p":{},"lab":[0.6442225575447083,-0.0656728446483612,0.043330222368240356],"noise":0.06294889748096466,"rgb":[109.5,154.7,113.1]},{"n":"minecraft:waxed_oxidized_copper","p":{},"lab":[0.661709189414978,-0.09041419625282288,0.020698249340057373],"noise":0.07553771883249283,"rgb":[83.7,165.0,134.8]},{"n":"minecraft:copper_ore","p":{},"lab":[0.5983710885047913,0.0005873143672943115,0.007880568504333496],"noise":0.07414689660072327,"rgb":[129.7,127.4,122.5]},{"n":"minecraft:deepslate_copper_ore","p":{},"lab":[0.4991336464881897,0.0012285560369491577,0.009929388761520386],"noise":0.11386386305093765,"rgb":[101.7,98.5,92.7]},{"n":"minecraft:waxed_cut_copper","p":{},"lab":[0.6235682368278503,0.09073929488658905,0.07003700733184814],"noise":0.06906544417142868,"rgb":[193.5,108.7,83.0]},{"n":"minecraft:waxed_exposed_cut_copper","p":{},"lab":[0.6109241843223572,0.03343378007411957,0.041245609521865845],"noise":0.06520861387252808,"rgb":[158.1,122.7,102.7]},{"n":"minecraft:waxed_weathered_cut_copper","p":{},"lab":[0.6277543902397156,-0.05521649122238159,0.040005505084991455],"noise":0.07245231419801712,"rgb":[111.4,147.6,110.4]},{"n":"minecraft:waxed_oxidized_cut_copper","p":{},"lab":[0.6388777494430542,-0.08493620157241821,0.01906287670135498],"noise":0.0876292809844017,"rgb":[81.6,156.9,129.0]},{"n":"minecraft:waxed_chiseled_copper","p":{},"lab":[0.6033852100372314,0.08992663025856018,0.07086867094039917],"noise":0.07223626971244812,"rgb":[186.6,102.9,76.5]},{"n":"minecraft:waxed_exposed_chiseled_copper","p":{},"lab":[0.6061426401138306,0.0374159961938858,0.03983199596405029],"noise":0.0661022812128067,"rgb":[158.2,120.3,102.2]},{"n":"minecraft:waxed_weathered_chiseled_copper","p":{},"lab":[0.6409534811973572,-0.06701281666755676,0.03962370753288269],"noise":0.08281724900007248,"rgb":[106.2,154.0,114.8]},{"n":"minecraft:waxed_oxidized_chiseled_copper","p":{},"lab":[0.6622190475463867,-0.08909726142883301,0.02116847038269043],"noise":0.08514329791069031,"rgb":[85.5,164.9,134.6]},{"n":"minecraft:waxed_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5517542958259583,0.07821758091449738,0.06737452745437622],"noise":0.11731339991092682,"rgb":[164.2,91.6,64.8]},{"n":"minecraft:waxed_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7627199292182922,0.04508593678474426,0.07598721981048584],"noise":0.1682470291852951,"rgb":[220.2,164.6,120.5]},{"n":"minecraft:waxed_exposed_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.565586507320404,0.031134769320487976,0.036745160818099976],"noise":0.09624739736318588,"rgb":[142.0,110.2,93.0]},{"n":"minecraft:waxed_exposed_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7152113318443298,0.03965115547180176,0.07340079545974731],"noise":0.13092876970767975,"rgb":[201.3,151.4,108.4]},{"n":"minecraft:waxed_weathered_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5779502987861633,-0.05297976732254028,0.029563158750534058],"noise":0.10675811022520065,"rgb":[95.3,132.3,103.3]},{"n":"minecraft:waxed_weathered_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7031329870223999,-0.010826438665390015,0.07619383931159973],"noise":0.1226264089345932,"rgb":[171.8,160.3,103.6]},{"n":"minecraft:waxed_oxidized_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5877929925918579,-0.07687243819236755,0.0171738862991333],"noise":0.12421868741512299,"rgb":[73.3,139.7,115.1]},{"n":"minecraft:waxed_oxidized_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.6831835508346558,-0.024574875831604004,0.05884543061256409],"noise":0.12029318511486053,"rgb":[153.3,157.8,112.0]},{"n":"minecraft:dripstone_block","p":{},"lab":[0.5593138933181763,0.02402743697166443,0.03342744708061218],"noise":0.07004375755786896,"rgb":[136.0,110.2,93.6]},{"n":"minecraft:moss_block","p":{},"lab":[0.5107806921005249,-0.053260400891304016,0.07827511429786682],"noise":0.057257141917943954,"rgb":[90.7,111.3,45.7]},{"n":"minecraft:rooted_dirt","p":{},"lab":[0.5639429688453674,0.0383763462305069,0.05147749185562134],"noise":0.09319879859685898,"rgb":[147.9,107.3,81.7]},{"n":"minecraft:mud","p":{},"lab":[0.3521502912044525,0.004817545413970947,-0.0036632418632507324],"noise":0.027923446148633957,"rgb":[60.6,58.0,60.9]},{"n":"minecraft:deepslate","p":{"axis":"x"},"lab":[0.44454336166381836,0.0007429122924804688,-0.0025422275066375732],"noise":0.0787174180150032,"rgb":[83.5,83.5,85.1]},{"n":"minecraft:deepslate","p":{"axis":"y"},"lab":[0.4658190608024597,0.0007508546113967896,-0.0025685131549835205],"noise":0.06419748812913895,"rgb":[89.3,89.3,91.0]},{"n":"minecraft:cobbled_deepslate","p":{},"lab":[0.4346168339252472,0.0012020021677017212,-0.004131883382797241],"noise":0.0773569643497467,"rgb":[80.7,80.7,83.3]},{"n":"minecraft:polished_deepslate","p":{},"lab":[0.41576290130615234,9.182095527648926e-05,-0.0009575784206390381],"noise":0.07699774205684662,"rgb":[75.6,75.8,76.3]},{"n":"minecraft:deepslate_tiles","p":{},"lab":[0.3449113965034485,0.00028139352798461914,-0.0006004869937896729],"noise":0.05850023776292801,"rgb":[57.1,57.0,57.4]},{"n":"minecraft:deepslate_bricks","p":{},"lab":[0.4122459590435028,0.00018121302127838135,-0.0005926787853240967],"noise":0.08438973873853683,"rgb":[74.8,74.8,75.2]},{"n":"minecraft:chiseled_deepslate","p":{},"lab":[0.34427788853645325,0.00025269389152526855,-0.0013565421104431152],"noise":0.06312374770641327,"rgb":[56.8,56.9,57.7]},{"n":"minecraft:cracked_deepslate_bricks","p":{},"lab":[0.3917587995529175,0.00021910667419433594,-0.0006272494792938232],"noise":0.08777861297130585,"rgb":[69.3,69.3,69.7]},{"n":"minecraft:cracked_deepslate_tiles","p":{},"lab":[0.33614540100097656,0.00028277933597564697,-0.00054207444190979],"noise":0.0581352636218071,"rgb":[54.9,54.8,55.1]},{"n":"minecraft:smooth_basalt","p":{},"lab":[0.4136092960834503,0.0031666606664657593,-0.007264137268066406],"noise":0.06421631574630737,"rgb":[75.3,74.5,79.3]},{"n":"minecraft:raw_iron_block","p":{},"lab":[0.667979896068573,0.025124788284301758,0.04610413312911987],"noise":0.12737950682640076,"rgb":[172.9,141.8,116.0]},{"n":"minecraft:raw_copper_block","p":{},"lab":[0.5861604809761047,0.053911641240119934,0.05772191286087036],"noise":0.10422349721193314,"rgb":[163.1,109.4,82.9]},{"n":"minecraft:raw_gold_block","p":{},"lab":[0.7828707695007324,0.010751962661743164,0.138564795255661],"noise":0.1270652562379837,"rgb":[224.2,176.7,61.4]},{"n":"minecraft:ochre_froglight","p":{"axis":"x"},"lab":[0.9376401901245117,-0.006966352462768555,0.0607454776763916],"noise":0.07786239683628082,"rgb":[245.9,235.2,188.8]},{"n":"minecraft:ochre_froglight","p":{"axis":"y"},"lab":[0.9674719572067261,-0.008424133062362671,0.04533588886260986],"noise":0.052875977009534836,"rgb":[250.8,245.8,210.6]},{"n":"minecraft:verdant_froglight","p":{"axis":"x"},"lab":[0.9215046167373657,-0.02959689497947693,0.022326886653900146],"noise":0.08840814232826233,"rgb":[215.3,235.9,213.5]},{"n":"minecraft:verdant_froglight","p":{"axis":"y"},"lab":[0.9558678865432739,-0.019292384386062622,0.01406639814376831],"noise":0.0605827160179615,"rgb":[231.3,244.9,230.5]},{"n":"minecraft:pearlescent_froglight","p":{"axis":"x"},"lab":[0.9258905053138733,0.010140746831893921,0.000256955623626709],"noise":0.08804409950971603,"rgb":[236.8,227.8,229.9]},{"n":"minecraft:pearlescent_froglight","p":{"axis":"y"},"lab":[0.9624139070510864,0.004947632551193237,0.0024440884590148926],"noise":0.05693303793668747,"rgb":[246.2,241.2,240.5]},{"n":"minecraft:pale_moss_block","p":{},"lab":[0.5451419353485107,-0.010291710495948792,0.00907716155052185],"noise":0.061517346650362015,"rgb":[108.2,114.2,106.5]}]},"copper":{"defaults":{"dither":"ordered","spread":0.05,"hold":0.02,"noise":0.0,"tone":true},"entries":[{"n":"minecraft:waxed_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5517542958259583,0.07821758091449738,0.06737452745437622],"noise":0.11731339991092682,"rgb":[164.2,91.6,64.8]},{"n":"minecraft:waxed_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7627199292182922,0.04508593678474426,0.07598721981048584],"noise":0.1682470291852951,"rgb":[220.2,164.6,120.5]},{"n":"minecraft:waxed_exposed_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.565586507320404,0.031134769320487976,0.036745160818099976],"noise":0.09624739736318588,"rgb":[142.0,110.2,93.0]},{"n":"minecraft:waxed_exposed_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7152113318443298,0.03965115547180176,0.07340079545974731],"noise":0.13092876970767975,"rgb":[201.3,151.4,108.4]},{"n":"minecraft:waxed_weathered_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5779502987861633,-0.05297976732254028,0.029563158750534058],"noise":0.10675811022520065,"rgb":[95.3,132.3,103.3]},{"n":"minecraft:waxed_weathered_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.7031329870223999,-0.010826438665390015,0.07619383931159973],"noise":0.1226264089345932,"rgb":[171.8,160.3,103.6]},{"n":"minecraft:waxed_oxidized_copper_bulb","p":{"lit":"false","powered":"false"},"lab":[0.5877929925918579,-0.07687243819236755,0.0171738862991333],"noise":0.12421868741512299,"rgb":[73.3,139.7,115.1]},{"n":"minecraft:waxed_oxidized_copper_bulb","p":{"lit":"true","powered":"false"},"lab":[0.6831835508346558,-0.024574875831604004,0.05884543061256409],"noise":0.12029318511486053,"rgb":[153.3,157.8,112.0]}]},"lamp":{"defaults":{"dither":"ordered","spread":0.05,"hold":0.02,"noise":0.0,"tone":true},"entries":[{"n":"minecraft:redstone_lamp","p":{"lit":"false"},"lab":[0.41211453080177307,0.04721681773662567,0.059559136629104614],"noise":0.13043370842933655,"rgb":[107.1,61.9,33.2]},{"n":"minecraft:redstone_lamp","p":{"lit":"true"},"lab":[0.6279001235961914,0.032039374113082886,0.07386887073516846],"noise":0.2665770947933197,"rgb":[169.7,126.9,82.3]}]}},"noise":"jQX7AmELFQqfBykOEAJzDNwHJg99CYsDxwAxDHcGNw9qChYA3w8AC2cJigZzD+gMmgURCLsPrAGkCtECaQQcDIAH7A8yBrQIoQojDW8APAs+BFQGfQ7IA78G9QAyDGsBIw5GBtkEcA3CCSMHGw/4DNkJAAxiAQ4HLAqcDLsE9QqvCRAIOw8VBFAA/gjDBKEGwg0fABsFUAfNDrQJqgHtB9AC3waoCGcEpg2GABIFqgJDCiEAdgkwBf0NbAZiDW8KgAI4CfQDugGtB4gEXAnLD1IIjQGpCxsNbAIDCgkFQAfgAmkP0QdDApYO1wu4BD0GZANlDoIE+w7TAEkD3g9dABgMqwZKAqAM3QVuD34LVgHZA60IawtlDZ0CcgQIDmwFQw3CC3QOXgKSBy0MbAggC3cOAAd/A1gL4wdmAMAI0AXcAOANIwslDz8M2AZhA6UFeQ0YAw0JUgXmB+gPlg00CSgLDQCWCtwIYgPwALcKvwEgCWsHGwsJBgUNGglvB68NvANKAfQNbgkDC9gCMQjxDB0Kkw/MATYGUwpJCIQLKAGlCfADxQDWBTcKtwMHDrEBNQTSDOAOVgI+DIgPmwODDm8MswbeAnkFJgGbDrwL3QB+CvkGHg87APYKMgSbAY8DaAxMBSsNaARyBoUN2QeGD5oMKgCkAj4IBgR6CyUCQQV1D8gIFwUcByMBYQQxDqEFiQL6BjcEWQyDABoPHgNRBpAPNQgKCxMNSQ8lAdMGwAmKBe0I2gAeBo0E4wlYAecKOQQdCCkKgQ2WCIYCzgkoDlICWwzxA8UNnga4DIEIQgbnDh8HkAHQD4YLRQlaAigF3gP6DYoJYg+CAY0OSAb1CWoM1woHAwcPwwzHCYoHZADOC44OVAneDVMFFgcuCREM3QQKApsGMQPWCM0EcQzYD9MC1Au8B74KfA0QB4YImAUOAq4PcAC9BOUK/AVZB3sE5wc+CRIGPwHfCa4CXg6cAGEJxwIXCisIYQCtBVUOhgr1BpQLlwVRDMwEbQobCOEAjgR5BxMAtAsfBhQCzw99CssEWwgqAY0D4QoeAlYN2ACZDhQK5A2+C8UBiAfICn0AZQYzDrIDVw+3AeQCrA5vC+wMVgkyB/oLQwNYDxEA1gyRDrYB4AuFDxUIBAWOCuQLXATNDUEM8wO1Dg0DaQzMAIoInQEkA2cHXwA3DUcDOA77AX8NcgjoAxQJPA1nA28GjQ3bAlsLeAfvD8MJTQQZCE4DZgdWAH4FpAnBDqIDUw01CZMBKgpdBckIJgxbBKIAYwa2A3MOUgGsDTMJgQt8A5sFcAqtBD4DcAsxB+QBqw/JBcEH8AGLBukKqweyCawE8Az3D+YJIg67CLgFnAvGBg8PoAVLCpoORQW6AA8IUAyZAQUPawW1DFsANwZcDk4LuQXTDMUPLwQ2DCMGEgLxB9MEyQwkB2gAPQ2fBgUKAwgdD0QCkgrPBfAHDAJ1BgIKFQEID4gI8wxRAHoNvQPNCA8BJwtRD+4ECQ2EAfYF3Q5PAkUGawT0CpMCfw9OAVEJngO6DJQCWQEhCzIPDgouBAgJyQYgCsUDywjJAlQMTQHqCEwCpgqMCP4ALg5lCkUPvQu0Au0O6ArSA+YPPgHaC94EbA3BCOcDTwzxBPQPUwhvDQYH7gHsBSkJ9w6BBiMK1wwPA2IIfwD6CC0OrgO6Cg0IrAs2AeEGswwbBKcHBgtqACUIUwYiDHYHBQPgBekNKwACDAMCeA3QDpMH9wRMCvAO4wNbBqUNLANfBx8FNQACBEAIxQVZCT4CRAUqDikDrQkXB0MALQtXDu4AsgzOAj0E5wtHDu8CsgrKBGoCWQ4gBcsGnQ1XCr8CzwtEBxsAUQ1QAz8JtA6dAD4K5w0ZBU8P/Al8Dn4ERgn2DMABhwpbB18PiQTvBd4JhwEDDaAGAQALDOoHwwE2C/UM3QmUBh4Lhw0EASAMiwcpC3MIBQZ8AWAMnw84BvkCHgk3B+0KcwBcBQ0K3geCDH0BNQsnCKYAjwvsA/0OKAaaBK8PEQpCBUYODgzJBHcICAbrArsL2wbvAS8Drg3qALYGtw8FBX8CBAtnCKcAZws/A7oPRQS4CewNUQV3Dx0JXgR7AtQP5wjzAbsOkATzDQAAIA1OCmcOVQQ6AikIRQqmBOkO5AVTCUMPRQHbA8YP/QZbDdADgw8ECVcBoQfiDPYAVwipAnQGcgF9BzACyg9lDKIBCgkYDXYFdAtCCMkK4APjC/0Ibw6gA9oMuwbwDREJxwfFC3kCnwhfA6UADwY5DhQB6wu1A5gHOgbpCXICtwYpBMECfwfmClsFpA3GC2YB3Qw0AnMLlgdFDSsG+QgzAFcF4gmcApEMjwUzCl8CjgnMDXILEA/hCBALrQP9CTgHTw5QBN8HoA8eAPoF4Q4fAvYHeAAvBtEJWwHLDuQE+QHDBckAkw4CB0sNEwqFC0gIDQcuBS8NqQoiA8UMiQ+/CO8LIg/SADAJxQ6JAOMG+AMOCPkNUgOwBNMLlQKfCgUODQyvB14GOw5PBKcLug6dBhAFyQONAK0MBgVtDVUARgXqChwBWgydAywJ/Qy/BAcKNQ5yDIUEfQu1B2ADsAp+DKoN6AmqBNIKjwETBDgP0gLDDbkJhQH/DnYA8wdoBRkBugkjBWENOwaAA5MMswlhD3UKFwDXBuYICwHSDgAFdQPmAQYPtACoCtYBOwhcA0QBRw2bCrcH/gLRDqQGZAgsDzwDlQkcAs0GjQpoAaYHCQPpBpUBow2lApwPbQk9AKYGRwh7A4QPJAa2DMMHiAUoADAMOASDCPgFiAvcA8YKUg45A80HLQK3C0MIqQEzBYUCAAb1C9sPBAqVDZUGGAiYCWALmwSCCLYN7gXuD6gMYgckCXkP1AWeCbQBfApmAu4LSQbODVUL8g5dBKANOQvZD4EFtAqzCBMHSwUpDVIEAw9IAisLIgHHCLACvA5NCQsLhganD6YC5Q1kCZsM7AFYBu8MSApVD2AEAQrmDnsHDA6wCB4EeQFqBWkChQx7AKoPBAdEDcMCggn7AywAxAmPBJkC6ACHC20EOAxuDgkELwnEANoErAiEAAMGhwLOCE0AuwyjA68OqgCuCwYClAgIDDEFXge/DdYL8wT0AG0MqQPaAYgKhgfxAN8ELAfwD6cIqQRsAeAGbAAXDe0CHwukAKAK6gxxDlkIUgtEBIoK9QK+BeYAeQxtB80LewbsCnIOVQwDB7gNuQgQALYFQwemDP8PtAf+DRYKSQwJB1AOtQThCYcGYgJ/CTwO8gVNCucAZg5pCRYDtAb5CRUOIQdqCFINOwV1DgkMNwOcDS8A7gIdDD0OFwvGCAgFdgaMDcEDpwUyAgcHhgMNDzUGXg3/CEIO3woLBWQPNQLiDSkBfQWQCAQEIgIzD84Hiw2GATwKkgKCAzwFsAGND1EDsQs5Ae8HZQ/7CioEyQcrA7MPhQb8A+UMMQD6DwoE9AGvBV4PbQCoCeIDWAg2CpwFGwmsCmQHiwWQAr4PfQyKAYsIUg+9B+UJFQxFAGoJagGlB/4BAQROCGUB9Am0A+gIUQchA6wPFgtQBjIKVANACwwFuA5uBqALJwd7CYYENgg6CvMFGg2nAXEFog14DE8BTAtrCAICzQp4BZMImQsGDXkKGgNHC+cGHQJoDywBwAsJDygEOw3WANMJqwN0B0oKlwRIC94ASw66BKcN+Qr9BHsPWwoEDNQO4gZ+DfkFvAy5DssJbgExDZoA4QSXDG8CPAkECDQBDw1hApIOoQCADT8C7g40A/4LaAgEANAGpwm5BOoNJQwIB7YOawKJBwcB5QiyBA0OZwzNBUENrAezAqIGswFvCHYOTQbMCx0AEA5lApQMYwMuBtUIwAKnBo0MLQMcBgYA5wTIApALmwChBA0C8Qs2BZ0HSAlUDtQGsg+yANgNLQSJCtYHZAyCBs8K7AQ+B2AJdwSACmIOzgMtD2cCyAW5ALUJWAReCtINTgbjDjcC2wdeAUIJHQRPCxYFrQ1GDDID+Ap0BOsI7w56BcMGJQn4D54KsgEpDwgI7AAUDtsIIQ0aCvwH3Q9mCRwLZgh4BiYOnwOSC6QBkgi7A1EK/QvlBWwPpgMtBSgJRwF6Do0LiwDtDyYC0gXEC1UHxAwiCIIPPQMVDYEAGgUuAyQM6wllBcQP3Qq9AKQO5wlKAHIJzwc6Dy4BtwwBA/oHWQ0SAegEgQdjDT8EwwsrChIEYAdBApAOxgN6ASIHCwMZDzAAdgpcAmYPnwReDJEFUgf8AqoIIAD/DWML3QINDdMDJggVBpgMugfcCcoARAO8CkYBOQlzBt4LRAihD/IKEgcPAIgNsAOwBq8I8wJHB6kPSgS6BUYCTwcpBTsL1AG7CXkL2gJHDFkAXwnXBe0Bwg8+C3IFdQxpBt0LHA6UBY4MFgRmDS4IkgbCCnIAgg0nD9EBTQ3kCYwBbQhAD+0G7QnqAZgNJwP2BA8ORgjsDjkFqQ1vBFoOhALMBXAB9QgLBL4McQhwAtwLIA6xBXsLBQITDPENwwosDeoJig9ABN0NzgV4DqQIjQaxDv8CrgzBBnwAtwlAAaIItASTCeUAoAcGCg0FHgGRCe4NrAL7CAkL+wS5C3EGcwTwBWAAawxZBbIO0Aj+CjgBLAxOAosLuAZVCt8BaAeiCWIL5g3FAjYPlgWjCtkO7wSSARAN/wOPCH0GFwFQCLoDzQCoBpoIQgBaB+oD+AEZC8IE+AkJDnsI5QSTDTEPMwM/Df8BAQulD6ACEAyXDp0FawOiBzwG6wCKA4cH4w+RClYOUgmrAiQLBQFDBE0HFg8+BhQETgk0AJkDAwwwD9AAxASGDNwGEgrVAVwH4wD0B3EJjAp3APUO8An9AlkPkwUSDooCsQzkCg4PDwrmDJoPrwDKB4sBxwMXDHUCjgdkCtIGrQ7LA9kFFwkmB/oBJgvODzkMMAriDgENfglNAkwDyQs/B/cDvQ+RBqQMmwnjAnsKYA3RD9IH+wyACAQGjwpyAwIIbgBrDpUE/AubDQoD3A/nBVYHew0HBasMHwk8B60LegntBG0DnAGDBR8ImANrBnAM2ApaD3cJ/QWYCzgAEQUHDC8I9wyzAJkNDgSECAMAlgQZAoYFOggrAbwNNAV1ARENXQhCCjwCSg5PABgFhQgGAbcFKwKdDvkEsQI+DcgPXQnfBf8MXQOHCQoG+go2BLkBVwt6AykCDQsMADsExAHhD+QH1A3rBjQMAgGaCRkOSgXEAhQH/QD8DSMElg9BCVAB3wLLCtQEUA+TCl0G3gwiCeMNZQsABDUM9AaxCJ4OAgaWAMsNjgUeCEkLYw+ADDYH1QvmA6cKjwAACS0H5QGzC0wBuArHBm0POQB4CDAOlgzZCMYOFAgnBowOgw1WCuYFowAuCwEJGwM0D0ELAQLUCEINigReCAgLBwLLB54NGwaHDtkGkgljAuUHlgGADhMDSwfBACoGeg9cChwE3Aq3AnkJnQQrDIgDgAalAW4EuQJkDqoJ2gbLDDQLTQ71A0AFwA7ZAuwI/AFqDTgFgwKZBr8AXgVKDEMBlwmzB5gCHA0DBNMOJAIuDTQGrgRwB+cPEgBfCtcOkgX5DA4DUgpTBFALTAAqDcADbgzVBUYL8gQeCqsO/AiNAj8AGQcoD7ILsQdwDzEBuQpuDbAJ9g3wCr0IfwGYD38ENQFEBiIKfQhJDZ4HPAyMBHYLjQdnCkgPjQkkBIMKlA9mA/wEEgypCJoGCgo9BQwIhQqoAIsM7gO4C68GagNBAQYJKQePDMcB8Q+ZCHwFWA4qCZAAog9UCJ8B0AuUA6cM0w2HBRYBkwN3DSoCJQe6CNYCvAXpBw4AAwVPBhADXAiUDacCTQ8jAIkD/wUTAWEOVQmRA2EBrwsEA/cNKwcXAlwGBQtXAGsP5wF6DPoAlA6kAwEOOwnYBW4CqwkeDloLbw9iABUFwQlZA34HmwvhASAHXQowBJcCNg26BjcF7AfMCSgMIwmEBvYJSQV0DHAOrQDrD3QDwAzeDlMLmQy8CWAFywvmBqMMygrTD/EJugKQBuQOrAzxBe4HdAAlDfYInwx/Dk4HOwN3CqME8AjwBp4LmgHTB84OIg2IAYQHgAQ5BrUKqQ6OBu0N+QCBBEcPJgPJDRoMngUED5QKMwH7D/0BWA2TBGMOLQDzChEDhwQYCowL8waICSwCjwfGAB8OyAESCCwEPQkWAuYE8gcSDSEFSADjCDoE8w/ACowF1QMdAdcJZQTbDcwHUA1ED1cC4AlzBRQDrgq8BLIIJwyyAp8NlQPECDkC6QzWCmsJsAxSBkgB3QipByYAWgl5BEILOgPdBqgBpgtKCJIP6gZADRcI2QHrBNYNGgSBCtoFcAMYDxML+wDYDm0G0A21AJcLUApsByQOWAKACbsB4QsqDwUIAQZdAtkLpgWCAMwDVQYKDcMPFgxJAJYGjg/AAAwKAQgfAVYMpATQB8AFCAIHCCcK4gRoC2gOWAOMDGMHlQ6bCNMKKw9vA8IF8QGFCfcAFAY8Dy4MAwGjCJ0P7QtXBysJ1QQmDUoDFAzKCF8ESwJ8D3MDyAuuBkYNpQQeB6MCXQ0UC7APPQFKCcEKKQxVCFoBWQRuBwsJNA6/AxAG2AyIDncFDAu4DzYAyQ7CAzYOegDVD/oDtQFLBtcNIwLeBYAA+gRPCZwH9Q3qCxAEnw4PC3cCEgmqBvECOgVnAHINCwIwBgkKwAeRAfcKvQ4mBkMJJAHwBJwKlADaDqYIawoZAOoE0Qj7BsMORQI/BX4OowkdC54CNQ3oAaEJUQu2BM4BHQeZCXwC7whFC8gG4gtkBcEMageXCgIJggsiBCYKhg2eDJYCCAExCiYFBw11CF4DTgUaDs4K6wyBDv8JTgQ/C+kPjgBODjUFOgcCA18N/gdODPgN1Qf0ArMFlQyzA5MGAg4jA4kMHwSKDZcHaAO4AAwP6gXSBOgLKgfiApcICg9uA8oNEwYhBFQN6gJ0CM8BcwnGAvoOJwWpAIwPHAiBAyAGdwvaD8QG1wJeAPgGrwwfCocA/gN6B4ABZQhwBhUDMAjyC/0DYwnGDAUA7gmnBAACPwaeD4kJZgs7AYYOYgl/C6ABDQZfCFQAWgrhDP8GlQi6DWEKzgBdD2cNFQAoCqELAAFADLIHLQrCAO8N2wrrBXENPAE8CC8M1Qa+AagOIgDaB0sE6wq+DXQJag+jAesHIQ/hBWMMuwKdCwsPsw3KAZUFmQoVAoEP2wWoCxQPzQNzCvgAMQSRDSgIxQRkAkgHEw8ACrUL5Q/LBQ8CSgvlA64BrAaDAz8IhQVNDEMG4AfbBEgO3gGbD2cGsQQjD08DAQdDC2oEFw4MA78K8ghYDDIO4wGcCJkFigtjBCUG6Qs7At4InA7ICXsFKQA2CRoH3wyLDvUHlgPgCHEBCweJDY0IoQxJBy4CMwbND8cKvwzZANYEcwLWAzIJRA74BGcPqQnCDGAO7gqYASYEdg82AhYJmAqQBTgDXgk9DAsICwA4Cr8OYAKECbUFMg2+BAoH0glTA/wOGgGhAiEIaQ2FA3oKiwTDANEGsQM7DJIEQApbA6sAnAZsDAAO/wQsC2UACAOCBQIPnQo3CUQA6QOqBeQIeQ67B50MLQG5BkMMPAC5B8sCDgVXCVMHxA3WCZoDpg5SAMgMBQdLCyACGATKDJ4IbwUCDYUAxgexD2cBbgsiBQgNTAYzDIUO+wkKAPkPKAeiDN8NxQp0D90Hkg10AagPXwXQCdMBqwqoAsUHiQ5JCXgLeAGXA+gNBgw9CFwNMAN0CmQG2g3ECn8IBgNHCvQFkwvtAPUPdgKrC7YA9wZsC0EE+wf4DhEBoQ31Ba0PrwGvA8IGmgtJCgUEzAIXDy0I1QCVCnIHvgNWBVYLtQhfAU0F5wJaCAwBjwKwBTELegj2CzcOnARuCOIP0wXPDCsEvAYWDbAHLwW9AnoGYA/cAdILTgBRBCgCmQ+3BCQN+Q6dCOAMTAQLBksIKA1HBcwIhA22AtgJLAXDCHIKPQfmC0cJPw9TAToOYQYtCZcNVAJJBMEPEAlzAQoOeQaMAswOrAm2CxoG/AxoCWwOzgYMBC8CgwdLADoNqAMQASEKGgKAD4gARgrbDjoLvAD+CWkHYQWzDskJDAaDC3cHXAHhAwkC5QbvCcIOdgNoClECUw9jAVcGYgzPA0EO7ALLAKIEqA16AjkI0QR2DEYAdAUlCv8LvwXhAsoLiwl4BB8NhQfXAycO4AFiBIsKQAOYACcNeApMD1oGcAkiC/wGHwz/B2cFBQkIBPIBqwgsDnwE5wzzCHgCVQ1FCJUAew6dCaQFGAshDiQADAyJAQMOrQbsC5gE2grSDz4A/gYVC+sO1AdZCv4FRAscA9UJjAenA9sMNAdpALkNvgZWD4wAGQxECu8AowalCMkPLwewCxwPHAkCBRkDkgytASUOwATxDkYDtQ0aC84MRgerBVMMSwOXAbkP6AalA18MKgXcApoNAQwACBIDGQkdBbYHWgSmCXUAkQdACVUCMwgPDLIFuAGHDIwDkwDtDP4O4gETDgMJVQHfDpEIogrpBDgCNAhVA7QFPg//CnYNMgBtBUIC1wcYBukApQtBCLsFygK4CBQAygl2AUcGmwL2DyEBxgn9B10LzgQbCg4BLw/jCq4IvQasAIQEHw9iBrEKwA/NDOUCxA4EDW4FEQ4NBHUNzwnBBCYJ/g9BB9cIKwWxBlwLvgJWBnEEkQtsA6MHfQ1eCz4O9AhTAtcEeAM3DCQK2QzaA+EN8wmCDicEtg/ZCi0NFwb3C54EGw5NCIIK9ATKDogGGAAODhsM4QdBBkYEvQHWD2wKZA1vAXcMogK+AL4IrgX8CocDAQFpCn8GLwH6Al8OXwZoArAN5APVCrcAtA8dDQgK3A31AXgPrgDsCVQFbQEVB9QMzQmbB+kBaQjIDjABOAu1AjUHgQGUCdcAqAfKA4cPMwdpC1wA7QNzDc0CtAwYCccFNgMbAkMOjAmIDEEDTwUbB5wJ+QNADtYGwQvXAVYIGAcgD/EIowuPD3wIMgslADkK8wtdAVsOYwjHBEUHGgAaCOgF4ghFDIwGxAPgDxELeQD2DgYGRQ5wBIkGbAn1BCoIOA0sBqUMzwSYDi4KGAL4CB8Dqg5MCZUHAgvGASAEqgoRD4cIjgtBAO0FoA7FCG0CWQsJCFUFQQoAD2wE2Q0jDLgCqATYAUgFSgdMDXYEIAhjBfEGvQklAwUMbgpGDwMD0QuUBG0OiALuDHAIqwQXA+UL2gjfAKoL9gLyD0sMJwA5D1oDJQvPBrwCUgyZAAsNHgV+BiEMCgEOBqYPcQcMDdEAxQbDA7INvgcOCw0BXAxLD5cAqQwdAzcBvgkiBgIAvQrABj8OKgzyAEgDFQ9dDI4Ciw/MDOMFywHdAz4FTw1lCQkBWAdgCtQArgnkBvsNdQVbAhkKzw2UB7wB+wUcCpkE0wj3AY8NWwmABfcHSQ5PCnsBVA+vBEgN1AnyAhQFdQl8DFoFZgpJAqAEBg5xA+MEfAbyDQcJDAf0DKoD1w94CTkNkgPCCH8KIQYxCX4BswolBHEAvweKDoMM8gZkAeAKow8PBKsN9wUkD8IBkAoKCFsP6wMyBf0KDAlpDq0Cugu3DsQH/ABcD6QL0QPuBpoCiQvoByoDtwhaAJ8L1Q0nApEPGwGhCD0PaAb3CV0HUAnMCtIBfQRODzMLIQKuBw8FyADiBzUPMQLGDXwH/gzKBdgI0Q0wCxUJfgLPDvgHqAUzAo4IZAvoAgoMFwRoDQgAOgz2BjQNkgCQA4EMTAe7ANwFpQrGBAADvAg6AdwOgwlUBBYO0AqEBfQOWQYjCGQEQgdUC00DVwyUAVcNWAD8D88C2AsTCH4AnwXPCI8OqgzpAk0LxgVIBHwLUwCOA+oOOwfmAgEF2wB1C9sJnAMEDnsM7wZrABwFIQnYB0oGaQOBCc0BeQh9D5cG3AS0DbYJZQNIDEwOYAbRCooMqQVKDRwAZgbQAZAMrwKEClQBpQ7aCcQFKw6aB0IEogujBTcI+gxpBaEOPwpMDPIDaQFqBgsKsA5LAbEJ5A9QBfIJvwsyATQKcQ+DBkcEGQ1AAEsJyAQuD/oJhA7cDGABcg8qCx0OiQXVAsUJagsnAVEIpA/rARMJdQdHAOoPBwQEAiQI8AsOCccPcwc0BO4I+AuhAxQNiwIJAFgK6Qg9AscO7wMgATAHfgNHArIGjg1ECd8LgwSCB2sNpQb3Ak8IUQ5QApEEdA0eDH4IvQW/D7UG8ALbC0kBuAMtBnQCNQrQBPMAYQf5C6MOZgQeDX0Cuwp/BdUMVwS9DZECYQgvCg8HEg/+BIQDEAqeADMNXQ5wBeIAiQjsBrUPEwW3DcoGrQpvCRgOLwvHDJ8JvA/gAGYFLw5xAi4ACQlCDJ4BMA3eBlgJKQbIBzUDUQGaChECRAxMCK8KZQdODZgIxws5B1oNDwnfAz0KYwBABqQH8w6sAxEHnwBjCgcG9AvgBJANsADxCoICsQ2sBXELqQYTAsIHSg/eCoQM1AOACxgBQgN/DMkBGQa2CDcAdQSqB+8KRQM4CGIKlw99AyUFVAo8BM8AYQxCDwcAoAnHDVQH9wh6BNYOwQFYBf0PoAAzBGoOoQEWBswPWQLIDdIIgwGWCfsL6w0yCNUOpgF8CaIOIAMdBt8IZgz/ABYIpw5XAwcLvwlWBOkFjgGQCfkH6A5iBbgHlQ+zBNQCAQ/RBQAN3QHlDswGvQziBTcLCw6QB34P1Ap5A0MFbQu+DtgD8gxTDuQAMQbRDFYDhgniCsEFwgK2CrkMLAgKBRILdwPkDNgEEQbbASgDlQv2A5kHQgE9Cw4NEQQuB0EPjwl3ASQF0Aw6AMEN+AKuDo8GgQLjDDsKigA6CV8Luw0GCHEKuQMnCZYLsQAZBPYBdgiRAJ8CogWgCMANQAJgCJgGqwE=","template":{"data/blockmp4/function/core/backup.mcfunction":"# as スクリーン（置く前）。置く所の今のブロックを、同じ列の空の一番上（世界の高さの上限の下）へ写す。\n# 同じ列なので、スクリーンが読み込まれていれば写しも読み込まれている。空いていない（何か置いてある）段は\n# 使わず、下の段を順に試す（8 段まで）。どこも駄目なら写さない（撤去は空気になる）\ndata remove entity @s data.bk\nfunction blockmp4:core/bounds\nscoreboard players set #top bmp4 -9999\nexecute if dimension minecraft:overworld run scoreboard players set #top bmp4 319\nexecute if dimension minecraft:the_nether run scoreboard players set #top bmp4 255\nexecute if dimension minecraft:the_end run scoreboard players set #top bmp4 255\nexecute if score #top bmp4 matches -9999 run return 0\nscoreboard players operation #ytop bmp4 = #my bmp4\nscoreboard players operation #ytop bmp4 += #ly bmp4\nscoreboard players remove #ytop bmp4 1\nscoreboard players set #slot bmp4 0\nfunction blockmp4:core/backup_try\n","data/blockmp4/function/core/backup_try.mcfunction":"# 段 #slot（1 から）: 下端 #sy = 上限 + 1 - #slot × #ly。スクリーンより上で、空気だけなら写す\nscoreboard players add #slot bmp4 1\nexecute if score #slot bmp4 matches 9.. run return 0\nscoreboard players operation #sy bmp4 = #ly bmp4\nscoreboard players operation #sy bmp4 *= #slot bmp4\nscoreboard players operation #sy bmp4 *= #-1 bmp4\nscoreboard players operation #sy bmp4 += #top bmp4\nscoreboard players add #sy bmp4 1\nexecute if score #sy bmp4 \u003c= #ytop bmp4 run return 0\nscoreboard players set #step bmp4 64\nscoreboard players set #nonair bmp4 0\nscoreboard players set #op bmp4 1\nfunction blockmp4:core/tiles\nexecute if score #nonair bmp4 matches 1.. run return run function blockmp4:core/backup_try\nscoreboard players set #op bmp4 2\nfunction blockmp4:core/tiles\nexecute store result entity @s data.bk int 1 run scoreboard players get #sy bmp4\n","data/blockmp4/function/core/bounds.mcfunction":"# as スクリーン。置く所の箱（ワールドの向き）: 角 #mx #my #mz、大きさ #sx × #ly × #sz\nexecute store result score #x0 bmp4 run data get entity @s Pos[0]\nexecute store result score #my bmp4 run data get entity @s Pos[1]\nexecute store result score #z0 bmp4 run data get entity @s Pos[2]\nexecute store result score #w bmp4 run data get entity @s data.w\nexecute store result score #h bmp4 run data get entity @s data.h\nexecute store result score #ly bmp4 run data get entity @s data.ly\n# 北: 列 → +X、行 → +Z / 東: 列 → +Z、行 → -X / 南: 列 → -X、行 → -Z / 西: 列 → -Z、行 → +X\nscoreboard players operation #mx bmp4 = #x0 bmp4\nscoreboard players operation #mz bmp4 = #z0 bmp4\nscoreboard players operation #sx bmp4 = #w bmp4\nscoreboard players operation #sz bmp4 = #h bmp4\nexecute if score @s bmp4.dir matches 1 run function blockmp4:core/bounds_e\nexecute if score @s bmp4.dir matches 2 run function blockmp4:core/bounds_s\nexecute if score @s bmp4.dir matches 3 run function blockmp4:core/bounds_w\n","data/blockmp4/function/core/bounds_e.mcfunction":"# 東向き: x は x0-h+1 .. x0、z は z0 .. z0+w-1\nscoreboard players operation #mx bmp4 -= #h bmp4\nscoreboard players add #mx bmp4 1\nscoreboard players operation #sx bmp4 = #h bmp4\nscoreboard players operation #sz bmp4 = #w bmp4\n","data/blockmp4/function/core/bounds_s.mcfunction":"# 南向き: x は x0-w+1 .. x0、z は z0-h+1 .. z0\nscoreboard players operation #mx bmp4 -= #w bmp4\nscoreboard players add #mx bmp4 1\nscoreboard players operation #mz bmp4 -= #h bmp4\nscoreboard players add #mz bmp4 1\n","data/blockmp4/function/core/bounds_w.mcfunction":"# 西向き: x は x0 .. x0+h-1、z は z0-w+1 .. z0\nscoreboard players operation #mz bmp4 -= #w bmp4\nscoreboard players add #mz bmp4 1\nscoreboard players operation #sx bmp4 = #h bmp4\nscoreboard players operation #sz bmp4 = #w bmp4\n","data/blockmp4/function/core/budget.mcfunction":"# 上限 #limit（MB）→ ブロックの数 #budget。読み込んだ構造物は 1 ブロック約 53 バイト（26.3 で測った）\nexecute if score #limit bmp4 matches 100001.. run scoreboard players set #limit bmp4 100000\nscoreboard players set #budget bmp4 18868\nscoreboard players operation #budget bmp4 *= #limit bmp4\n","data/blockmp4/function/core/build.mcfunction":"# as 新しいマーカー。スクリーンを置く（同じ所にあった古いスクリーンは先に片付ける）\nexecute as @e[type=marker,tag=bmp4.screen,distance=..0.01] at @s run function blockmp4:core/clear\ntag @s remove bmp4.new\ntag @s add bmp4.screen\ndata modify entity @s data set from storage blockmp4:main sel\nexecute unless data entity @s data.s run function blockmp4:core/legacy_s with entity @s data\nexecute unless data entity @s data.ly run function blockmp4:core/legacy_ly\nexecute if score #dir bmp4 matches 0 run data modify entity @s data.rot set value \"none\"\nexecute if score #dir bmp4 matches 1 run data modify entity @s data.rot set value \"clockwise_90\"\nexecute if score #dir bmp4 matches 2 run data modify entity @s data.rot set value \"180\"\nexecute if score #dir bmp4 matches 3 run data modify entity @s data.rot set value \"counterclockwise_90\"\nexecute store result score @s bmp4.n run data get entity @s data.n\nexecute store result score @s bmp4.fps run data get entity @s data.fps\nexecute store result score @s bmp4.k run data get entity @s data.k\nexecute unless data entity @s data.b run function blockmp4:core/legacy_b\nexecute store result score @s bmp4.b run data get entity @s data.b\nscoreboard players set @s bmp4.st 0\nscoreboard players add #seq bmp4 1\nscoreboard players operation @s bmp4.seq = #seq bmp4\nscoreboard players set #built bmp4 1\n# スクリーンのチャンクを常に読み込む（大きいスクリーンは、1 人のプレイヤーの周りだけでは収まらない。\n# /place template は読み込まれていない所が 1 つでもあると何も置かない）。読み込まれたら続きをする\nfunction blockmp4:core/keep\nexecute if function blockmp4:core/ready run return run function blockmp4:core/finish\ntag @s add bmp4.wait\nscoreboard players set @s bmp4.life 400\n","data/blockmp4/function/core/catchup.mcfunction":"# as スクリーン。#tg のフレームまで差分を順に置く（置いたフレームの量を #mem に足す）\nexecute if score @s bmp4.f >= #tg bmp4 run return 0\nscoreboard players add @s bmp4.f 1\nexecute store result entity @s data.f int 1 run scoreboard players get @s bmp4.f\nscoreboard players operation #mem bmp4 += @s bmp4.b\nfunction blockmp4:core/place_frame with entity @s data\nfunction blockmp4:core/catchup\n","data/blockmp4/function/core/clear.mcfunction":"# as スクリーン（at その角）。撤去: 置く前の写しがあれば元に戻し、無ければ空気にする。チャンクの常時読み込みもやめる\n# （読み込みを待っている間なら、まだ何も置いていないので戻す物も無い）\nfunction blockmp4:core/bounds\nexecute unless entity @s[tag=bmp4.wait] if data entity @s data.bk run function blockmp4:core/restore\nexecute unless entity @s[tag=bmp4.wait] unless data entity @s data.bk run function blockmp4:core/place_clear with entity @s data\nfunction blockmp4:core/bounds\nscoreboard players set #step bmp4 240\nscoreboard players set #op bmp4 6\nfunction blockmp4:core/tiles\nforceload remove ~ ~ ~1 ~1\nkill @s\n# 重なっているほかのスクリーンのチャンクまで外していたら、読み込み直す\nexecute as @e[type=marker,tag=bmp4.screen] at @s run function blockmp4:core/keep\n","data/blockmp4/function/core/edge.mcfunction":"# 枠の 1 辺。#n 個置いたら右へ曲がって次の辺（#seg: 0 奥 / 1 右 / 2 手前 / 3 左）\nparticle dust{color:[1.0,0.8,0.1],scale:1.0} ~ ~ ~ 0 0 0 0 1 force\nscoreboard players remove #n bmp4 1\nexecute if score #n bmp4 matches 1.. positioned ^ ^ ^1 run return run function blockmp4:core/edge\nscoreboard players add #seg bmp4 1\nexecute if score #seg bmp4 matches 4.. run return 0\nexecute if score #seg bmp4 matches 1 run scoreboard players operation #n bmp4 = #h bmp4\nexecute if score #seg bmp4 matches 2 run scoreboard players operation #n bmp4 = #w bmp4\nexecute if score #seg bmp4 matches 3 run scoreboard players operation #n bmp4 = #h bmp4\nexecute positioned ^ ^ ^1 rotated ~90 ~ run function blockmp4:core/edge\n","data/blockmp4/function/core/facing.mcfunction":"# 実行者の向きを 4 方向に丸める: 0 北 / 1 東 / 2 南 / 3 西\nscoreboard players set #dir bmp4 0\nexecute if entity @s[y_rotation=-135..-45] run scoreboard players set #dir bmp4 1\nexecute if entity @s[y_rotation=-45..45] run scoreboard players set #dir bmp4 2\nexecute if entity @s[y_rotation=45..135] run scoreboard players set #dir bmp4 3\n","data/blockmp4/function/core/finish.mcfunction":"# as スクリーン（チャンクが読み込まれた後）。置く所を空の上の方へ写しておき（取り消し・撤去で元に戻す）、\n# ライトの層と最初のフレームを置く\ntag @s remove bmp4.wait\nfunction blockmp4:core/backup\nexecute if data entity @s data{lt:1} run function blockmp4:core/place_base with entity @s data\nscoreboard players set #t bmp4 0\nfunction blockmp4:core/seek\n","data/blockmp4/function/core/flush.mcfunction":"# 読み込んだフレームを空ける。サーバーは構造物を /reload まで覚えているので、reload するしかない\n# （26.3 で、止まりはほぼ無い。ほかのデータパックの load も動く）\nscoreboard players set #mem bmp4 0\nreload\n","data/blockmp4/function/core/keep.mcfunction":"# as スクリーン（at その角）。このスクリーンのチャンクを常に読み込む（もう読み込んであれば何も変わらない）。\n# 角の +1 の所も: /place template は「角から角 + size（1×1×1）」のチャンクが読み込まれているかを確かめるため\nfunction blockmp4:core/bounds\nscoreboard players set #step bmp4 240\nscoreboard players set #op bmp4 5\nfunction blockmp4:core/tiles\nforceload add ~ ~ ~1 ~1\n","data/blockmp4/function/core/legacy_b.mcfunction":"# 1.0.0 で作った動画: 1 フレームのブロックの数が分からないので、画面の 3 分の 1 とみなす\nexecute store result score #b bmp4 run data get entity @s data.w\nexecute store result score #h bmp4 run data get entity @s data.h\nscoreboard players operation #b bmp4 *= #h bmp4\nscoreboard players set #3 bmp4 3\nscoreboard players operation #b bmp4 /= #3 bmp4\nexecute store result entity @s data.b int 1 run scoreboard players get #b bmp4\n","data/blockmp4/function/core/legacy_ly.mcfunction":"# 1.0.0 で作った動画: 段の数（スクリーン 1、ランプは 2、ライトを重ねればさらに 1）\nscoreboard players set #ly bmp4 1\nexecute if data entity @s data{m:\"lamp\"} run scoreboard players set #ly bmp4 2\nexecute if data entity @s data{lt:1} run scoreboard players add #ly bmp4 1\nexecute store result entity @s data.ly int 1 run scoreboard players get #ly bmp4\n","data/blockmp4/function/core/legacy_s.mcfunction":"# 1.0.0 で作った動画: 構造物は blockmp4:\u003c名前>/ にある\n$data modify entity @s data.s set value \"blockmp4:$(v)\"\n","data/blockmp4/function/core/next_rot.mcfunction":"# 一覧（tmp）を、選んでいる動画が先頭に来るまで回す（最大で本数ぶん）\ndata modify storage blockmp4:main cmp set from storage blockmp4:main sel.v\nexecute store success score #diff bmp4 run data modify storage blockmp4:main cmp set from storage blockmp4:main tmp[0].v\nexecute if score #diff bmp4 matches 0 run return 0\nscoreboard players remove #n bmp4 1\nexecute if score #n bmp4 matches ..0 run return 0\ndata modify storage blockmp4:main tmp append from storage blockmp4:main tmp[0]\ndata remove storage blockmp4:main tmp[0]\nfunction blockmp4:core/next_rot\n","data/blockmp4/function/core/outline.mcfunction":"# as 下見のマーカー。左奥の角から 右 → 手前 → 左 → 奥 の順に枠を描く。角（見ていたブロックの上）は緑\nexecute store result score #w bmp4 run data get entity @s data.w\nexecute store result score #h bmp4 run data get entity @s data.h\nscoreboard players operation #n bmp4 = #w bmp4\nscoreboard players set #seg bmp4 0\nexecute rotated as @s positioned ^0.5 ^0.1 ^0.5 rotated ~90 0 run function blockmp4:core/edge\nparticle dust{color:[0.3,1.0,0.4],scale:2.0} ~ ~0.5 ~ 0.15 0.15 0.15 0 4 force\n","data/blockmp4/function/core/pause.mcfunction":"execute if score @s bmp4.st matches 1 run scoreboard players set @s bmp4.st 2\n","data/blockmp4/function/core/place_at.mcfunction":"# as 新しいマーカー（置く場所の左奥の角）。向きを付け、同じ人の同じ下見があれば置く、無ければ下見にする\nscoreboard players operation @s bmp4.dir = #dir bmp4\nscoreboard players operation @s bmp4.id = #pid bmp4\nexecute if score #dir bmp4 matches 0 run tp @s ~ ~ ~ 180 0\nexecute if score #dir bmp4 matches 1 run tp @s ~ ~ ~ -90 0\nexecute if score #dir bmp4 matches 2 run tp @s ~ ~ ~ 0 0\nexecute if score #dir bmp4 matches 3 run tp @s ~ ~ ~ 90 0\nscoreboard players set #same bmp4 0\nexecute as @e[type=marker,tag=bmp4.preview,distance=..0.01] if score @s bmp4.id = #pid bmp4 if score @s bmp4.dir = #dir bmp4 run scoreboard players set #same bmp4 1\nexecute as @e[type=marker,tag=bmp4.preview] if score @s bmp4.id = #pid bmp4 run kill @s\nexecute if score #same bmp4 matches 1 run return run function blockmp4:core/build\ntag @s remove bmp4.new\ntag @s add bmp4.preview\ndata modify entity @s data set from storage blockmp4:main sel\nscoreboard players set @s bmp4.life 200\nfunction blockmp4:core/outline\n","data/blockmp4/function/core/place_base.mcfunction":"# ライトの層（スクリーンの 1 つ上）\n$place template $(s)/base ~ ~ ~ $(rot) none 1 0 strict\n","data/blockmp4/function/core/place_clear.mcfunction":"# 写しが無いときの撤去: スクリーン（とライトの層）を空気にする。周りへの更新あり\n$place template $(s)/clear ~ ~ ~ $(rot)\n","data/blockmp4/function/core/place_frame.mcfunction":"# フレーム $(f) を置く。strict = 周りへの更新なし（速い）。$(s) は動画の構造物の置き場（データパックごとに別の名前空間）\n$place template $(s)/$(f) ~ ~ ~ $(rot) none 1 0 strict\n","data/blockmp4/function/core/play.mcfunction":"# as 再生中のスクリーン（毎 tick）。frame = t * fps / 20。最後まで行ったら止める（最後のフレームが残る）\nscoreboard players add @s bmp4.t 1\nscoreboard players operation #tg bmp4 = @s bmp4.t\nscoreboard players operation #tg bmp4 *= @s bmp4.fps\nscoreboard players operation #tg bmp4 /= #20 bmp4\nexecute if score #tg bmp4 >= @s bmp4.n run return run scoreboard players set @s bmp4.st 0\nscoreboard players operation #f0 bmp4 = @s bmp4.f\nfunction blockmp4:core/catchup\n# この tick にフレームを置かなかった（FPS が 20 より低い）なら、次のフレームを先に読み込んでおく（重さを散らす）\nexecute if score @s bmp4.f = #f0 bmp4 run function blockmp4:core/prefetch\n","data/blockmp4/function/core/prefetch.mcfunction":"# as スクリーン。次のフレームの構造物だけ読み込む（置かない: 完全度 0）。読み込みは 1 ブロック約 1 µs かかるので、\n# フレームを置かない tick に済ませておくと、置く tick が軽くなる\nscoreboard players operation #p bmp4 = @s bmp4.f\nscoreboard players add #p bmp4 1\nexecute if score #p bmp4 >= @s bmp4.n run return 0\nexecute store result entity @s data.p int 1 run scoreboard players get #p bmp4\nfunction blockmp4:core/prefetch_at with entity @s data\n","data/blockmp4/function/core/prefetch_at.mcfunction":"$place template $(s)/$(p) ~ ~ ~ none none 0 0\n","data/blockmp4/function/core/preview.mcfunction":"# as 下見のマーカー（毎 tick）。10 秒で消える。枠は 4 tick ごと\nscoreboard players remove @s bmp4.life 1\nexecute if score @s bmp4.life matches ..0 run return run kill @s\nscoreboard players operation #m bmp4 = @s bmp4.life\nscoreboard players operation #m bmp4 %= #4 bmp4\nexecute if score #m bmp4 matches 0 run function blockmp4:core/outline\n","data/blockmp4/function/core/ray.mcfunction":"# 視線の先の最初の「通り抜けない」ブロックを探し、その上にマーカー（bmp4.new）を出す。0.1 ずつ最大 160 ブロック\nexecute unless block ~ ~ ~ #blockmp4:pass align xyz positioned ~0.5 ~1 ~0.5 run return run summon marker ~ ~ ~ {Tags:[\"bmp4.new\"]}\nscoreboard players remove #r bmp4 1\nexecute if score #r bmp4 matches 1.. positioned ^ ^ ^0.1 run function blockmp4:core/ray\n","data/blockmp4/function/core/ready.mcfunction":"# 箱（core/bounds）の四隅と真ん中、角の +1 のチャンクが読み込まれているか（1 / 0）\nexecute unless loaded ~1 ~ ~1 run return 0\nscoreboard players operation #x2 bmp4 = #mx bmp4\nscoreboard players operation #x2 bmp4 += #sx bmp4\nscoreboard players remove #x2 bmp4 1\nscoreboard players operation #z2 bmp4 = #mz bmp4\nscoreboard players operation #z2 bmp4 += #sz bmp4\nscoreboard players remove #z2 bmp4 1\nscoreboard players operation #xc bmp4 = #mx bmp4\nscoreboard players operation #xc bmp4 += #x2 bmp4\nscoreboard players set #2 bmp4 2\nscoreboard players operation #xc bmp4 /= #2 bmp4\nscoreboard players operation #zc bmp4 = #mz bmp4\nscoreboard players operation #zc bmp4 += #z2 bmp4\nscoreboard players operation #zc bmp4 /= #2 bmp4\nexecute store result storage blockmp4:main pt.x1 int 1 run scoreboard players get #mx bmp4\nexecute store result storage blockmp4:main pt.x2 int 1 run scoreboard players get #x2 bmp4\nexecute store result storage blockmp4:main pt.xc int 1 run scoreboard players get #xc bmp4\nexecute store result storage blockmp4:main pt.z1 int 1 run scoreboard players get #mz bmp4\nexecute store result storage blockmp4:main pt.z2 int 1 run scoreboard players get #z2 bmp4\nexecute store result storage blockmp4:main pt.zc int 1 run scoreboard players get #zc bmp4\nexecute store result storage blockmp4:main pt.y int 1 run scoreboard players get #my bmp4\nreturn run function blockmp4:core/ready_at with storage blockmp4:main pt\n","data/blockmp4/function/core/ready_at.mcfunction":"$execute unless loaded $(x1) $(y) $(z1) run return 0\n$execute unless loaded $(x2) $(y) $(z1) run return 0\n$execute unless loaded $(x1) $(y) $(z2) run return 0\n$execute unless loaded $(x2) $(y) $(z2) run return 0\n$execute unless loaded $(xc) $(y) $(zc) run return 0\nreturn 1\n","data/blockmp4/function/core/reselect.mcfunction":"$data modify storage blockmp4:main sel set from storage blockmp4:main videos[{v:\"$(v)\"}]\n","data/blockmp4/function/core/restore.mcfunction":"# as スクリーン。写しを元の所へ戻し（周りへの更新あり）、空の写しを消す\nfunction blockmp4:core/bounds\nexecute store result score #sy bmp4 run data get entity @s data.bk\nscoreboard players set #step bmp4 64\nscoreboard players set #op bmp4 3\nfunction blockmp4:core/tiles\nscoreboard players set #op bmp4 4\nfunction blockmp4:core/tiles\n","data/blockmp4/function/core/resume.mcfunction":"execute if score @s bmp4.st matches 2 run return run scoreboard players set @s bmp4.st 1\nexecute if score @s bmp4.st matches 0 run function blockmp4:core/start\n","data/blockmp4/function/core/seek.mcfunction":"# as スクリーン。#t（tick）の位置へ: 直前のキーフレームを置き、差分を重ねる\nexecute if score #t bmp4 matches ..-1 run scoreboard players set #t bmp4 0\nscoreboard players operation #tg bmp4 = #t bmp4\nscoreboard players operation #tg bmp4 *= @s bmp4.fps\nscoreboard players operation #tg bmp4 /= #20 bmp4\nscoreboard players operation #last bmp4 = @s bmp4.n\nscoreboard players remove #last bmp4 1\nexecute if score #tg bmp4 > #last bmp4 run function blockmp4:core/seek_end\nscoreboard players operation @s bmp4.t = #t bmp4\nscoreboard players operation #kf bmp4 = #tg bmp4\nscoreboard players operation #kf bmp4 /= @s bmp4.k\nscoreboard players operation #kf bmp4 *= @s bmp4.k\nscoreboard players operation @s bmp4.f = #kf bmp4\nexecute store result entity @s data.f int 1 run scoreboard players get @s bmp4.f\n# キーフレームは全画素なので、差分の平均の 3 つ分として数える\nscoreboard players operation #mem bmp4 += @s bmp4.b\nscoreboard players operation #mem bmp4 += @s bmp4.b\nscoreboard players operation #mem bmp4 += @s bmp4.b\nfunction blockmp4:core/place_frame with entity @s data\nfunction blockmp4:core/catchup\n","data/blockmp4/function/core/seek_end.mcfunction":"# 最後のフレームに丸める。t はそのフレームが出る最初の tick = ceil(last * 20 / fps)\nscoreboard players operation #tg bmp4 = #last bmp4\nscoreboard players operation #t bmp4 = #last bmp4\nscoreboard players operation #t bmp4 *= #20 bmp4\nscoreboard players operation #t bmp4 += @s bmp4.fps\nscoreboard players remove #t bmp4 1\nscoreboard players operation #t bmp4 /= @s bmp4.fps\n","data/blockmp4/function/core/seek_frame.mcfunction":"# as スクリーン。フレーム #fr へ: そのフレームが出る最初の tick = ceil(#fr * 20 / fps)\nexecute if score #fr bmp4 matches ..-1 run scoreboard players set #fr bmp4 0\nscoreboard players operation #t bmp4 = #fr bmp4\nscoreboard players operation #t bmp4 *= #20 bmp4\nscoreboard players operation #t bmp4 += @s bmp4.fps\nscoreboard players remove #t bmp4 1\nscoreboard players operation #t bmp4 /= @s bmp4.fps\nfunction blockmp4:core/seek_show\n","data/blockmp4/function/core/seek_show.mcfunction":"# as スクリーン。シークして、表示用に「フレームの時刻（秒・1/100 秒）」「フレーム / 最後のフレーム」を出す。\n# 止めてあれば一時停止にする（再生 / 一時停止で、その位置から続けられるように）\nfunction blockmp4:core/seek\nexecute if score @s bmp4.st matches 0 run scoreboard players set @s bmp4.st 2\nscoreboard players operation #fn bmp4 = @s bmp4.f\nscoreboard players operation #fl bmp4 = @s bmp4.n\nscoreboard players remove #fl bmp4 1\nscoreboard players operation #sec bmp4 = @s bmp4.f\nscoreboard players operation #sec bmp4 /= @s bmp4.fps\nscoreboard players operation #cs bmp4 = @s bmp4.f\nscoreboard players operation #cs bmp4 %= @s bmp4.fps\nscoreboard players operation #cs bmp4 *= #20 bmp4\nscoreboard players operation #cs bmp4 *= #5 bmp4\nscoreboard players operation #cs bmp4 /= @s bmp4.fps\n","data/blockmp4/function/core/show_time.mcfunction":"# 「12.50 秒  250 / 2852」（フレームの時刻、フレーム / 最後のフレーム）\nexecute if score #cs bmp4 matches 10.. run return run title @s actionbar [{score:{name:\"#sec\",objective:\"bmp4\"}},\".\",{score:{name:\"#cs\",objective:\"bmp4\"}},{text:\" 秒  \"},{score:{name:\"#fn\",objective:\"bmp4\"}},{text:\" / \"},{score:{name:\"#fl\",objective:\"bmp4\"}}]\ntitle @s actionbar [{score:{name:\"#sec\",objective:\"bmp4\"}},\".0\",{score:{name:\"#cs\",objective:\"bmp4\"}},{text:\" 秒  \"},{score:{name:\"#fn\",objective:\"bmp4\"}},{text:\" / \"},{score:{name:\"#fl\",objective:\"bmp4\"}}]\n","data/blockmp4/function/core/skip.mcfunction":"# as スクリーン。今の位置から #d（tick）動かす\nscoreboard players operation #t bmp4 = @s bmp4.t\nscoreboard players operation #t bmp4 += #d bmp4\nfunction blockmp4:core/seek_show\n","data/blockmp4/function/core/skip_frame.mcfunction":"# as スクリーン。今のフレームから #d フレーム動かす\nscoreboard players operation #fr bmp4 = @s bmp4.f\nscoreboard players operation #fr bmp4 += #d bmp4\nfunction blockmp4:core/seek_frame\n","data/blockmp4/function/core/start.mcfunction":"# as スクリーン。最初から再生（状態 bmp4.st: 0 停止 / 1 再生 / 2 一時停止）\nscoreboard players set @s bmp4.st 1\nscoreboard players set #t bmp4 0\nfunction blockmp4:core/seek\n","data/blockmp4/function/core/stop.mcfunction":"# as スクリーン。止めて最初のフレームへ\nscoreboard players set @s bmp4.st 0\nscoreboard players set #t bmp4 0\nfunction blockmp4:core/seek\n","data/blockmp4/function/core/tile_check.mcfunction":"# 空の柱に空気以外がいくつあるか: 自分自身へ masked で写すと、空気以外の数が返る（見た目は変わらない）\nscoreboard players set #c bmp4 0\n$execute store result score #c bmp4 run clone $(x1) $(s1) $(z1) $(x2) $(s2) $(z2) $(x1) $(s1) $(z1) strict masked force\nscoreboard players operation #nonair bmp4 += #c bmp4\n","data/blockmp4/function/core/tile_keep.mcfunction":"$forceload add $(x1) $(z1) $(x2) $(z2)\n","data/blockmp4/function/core/tile_load.mcfunction":"# 空 → 地上（周りへの更新あり。元どおりの振る舞いに戻る）\n$clone $(x1) $(s1) $(z1) $(x2) $(s2) $(z2) $(x1) $(y1) $(z1) replace\n","data/blockmp4/function/core/tile_release.mcfunction":"$forceload remove $(x1) $(z1) $(x2) $(z2)\n","data/blockmp4/function/core/tile_save.mcfunction":"# 地上 → 空（strict: 空で草が枯れたり水が流れたりしないように）\n$clone $(x1) $(y1) $(z1) $(x2) $(y2) $(z2) $(x1) $(s1) $(z1) strict replace\n","data/blockmp4/function/core/tile_wipe.mcfunction":"# 空の写しを消す\n$fill $(x1) $(s1) $(z1) $(x2) $(s2) $(z2) air strict\n","data/blockmp4/function/core/tiles.mcfunction":"# 箱（#mx #my #mz、#sx × #ly × #sz）を #step ブロック角の柱に分けて #op をする\n#   写す・戻す（#step 64）: 1 回のコマンドで動かせるブロックに上限 max_block_modifications = 32768 がある。64×64×段 3 でも 12288\n#   チャンクの読み込み（#step 240）: forceload は 1 回 256 チャンクまで。240 ブロックなら 16×16 チャンクに収まる\n# #op: 1 写す先が空気だけか数える / 2 写す / 3 戻す / 4 写しを消す / 5 チャンクを常に読み込む / 6 やめる\nscoreboard players set #i bmp4 0\nfunction blockmp4:core/tiles_i\n","data/blockmp4/function/core/tiles_i.mcfunction":"execute if score #i bmp4 >= #sx bmp4 run return 0\nscoreboard players set #j bmp4 0\nfunction blockmp4:core/tiles_j\nscoreboard players operation #i bmp4 += #step bmp4\nfunction blockmp4:core/tiles_i\n","data/blockmp4/function/core/tiles_j.mcfunction":"execute if score #j bmp4 >= #sz bmp4 run return 0\n# x: #mx+#i .. min(+#step-1, 端)、z も同じ。y は地上 #my .. +#ly-1 と空 #sy .. +#ly-1\nscoreboard players operation #x1 bmp4 = #mx bmp4\nscoreboard players operation #x1 bmp4 += #i bmp4\nscoreboard players operation #x2 bmp4 = #x1 bmp4\nscoreboard players operation #x2 bmp4 += #step bmp4\nscoreboard players remove #x2 bmp4 1\nscoreboard players operation #xe bmp4 = #mx bmp4\nscoreboard players operation #xe bmp4 += #sx bmp4\nscoreboard players remove #xe bmp4 1\nscoreboard players operation #x2 bmp4 \u003c #xe bmp4\nscoreboard players operation #z1 bmp4 = #mz bmp4\nscoreboard players operation #z1 bmp4 += #j bmp4\nscoreboard players operation #z2 bmp4 = #z1 bmp4\nscoreboard players operation #z2 bmp4 += #step bmp4\nscoreboard players remove #z2 bmp4 1\nscoreboard players operation #ze bmp4 = #mz bmp4\nscoreboard players operation #ze bmp4 += #sz bmp4\nscoreboard players remove #ze bmp4 1\nscoreboard players operation #z2 bmp4 \u003c #ze bmp4\nscoreboard players operation #y2 bmp4 = #my bmp4\nscoreboard players operation #y2 bmp4 += #ly bmp4\nscoreboard players remove #y2 bmp4 1\nscoreboard players operation #s2 bmp4 = #sy bmp4\nscoreboard players operation #s2 bmp4 += #ly bmp4\nscoreboard players remove #s2 bmp4 1\nexecute store result storage blockmp4:main tile.x1 int 1 run scoreboard players get #x1 bmp4\nexecute store result storage blockmp4:main tile.x2 int 1 run scoreboard players get #x2 bmp4\nexecute store result storage blockmp4:main tile.z1 int 1 run scoreboard players get #z1 bmp4\nexecute store result storage blockmp4:main tile.z2 int 1 run scoreboard players get #z2 bmp4\nexecute store result storage blockmp4:main tile.y1 int 1 run scoreboard players get #my bmp4\nexecute store result storage blockmp4:main tile.y2 int 1 run scoreboard players get #y2 bmp4\nexecute store result storage blockmp4:main tile.s1 int 1 run scoreboard players get #sy bmp4\nexecute store result storage blockmp4:main tile.s2 int 1 run scoreboard players get #s2 bmp4\nexecute if score #op bmp4 matches 1 run function blockmp4:core/tile_check with storage blockmp4:main tile\nexecute if score #op bmp4 matches 2 run function blockmp4:core/tile_save with storage blockmp4:main tile\nexecute if score #op bmp4 matches 3 run function blockmp4:core/tile_load with storage blockmp4:main tile\nexecute if score #op bmp4 matches 4 run function blockmp4:core/tile_wipe with storage blockmp4:main tile\nexecute if score #op bmp4 matches 5 run function blockmp4:core/tile_keep with storage blockmp4:main tile\nexecute if score #op bmp4 matches 6 run function blockmp4:core/tile_release with storage blockmp4:main tile\nscoreboard players operation #j bmp4 += #step bmp4\nfunction blockmp4:core/tiles_j\n","data/blockmp4/function/core/toggle.mcfunction":"execute if score @s bmp4.st matches 1 run return run scoreboard players set @s bmp4.st 2\nexecute if score @s bmp4.st matches 2 run return run scoreboard players set @s bmp4.st 1\nfunction blockmp4:core/start\n","data/blockmp4/function/core/wait.mcfunction":"# as チャンクの読み込みを待っているスクリーン（毎 tick）。5 tick ごとに確かめ、20 秒で諦めて続ける\nscoreboard players remove @s bmp4.life 1\nexecute if score @s bmp4.life matches ..0 run return run function blockmp4:core/finish\nscoreboard players operation #m bmp4 = @s bmp4.life\nscoreboard players operation #m bmp4 %= #5 bmp4\nexecute unless score #m bmp4 matches 0 run return 0\nfunction blockmp4:core/bounds\nexecute if function blockmp4:core/ready run function blockmp4:core/finish\n","data/blockmp4/function/core/wand.mcfunction":"# as 杖を使ったプレイヤー。押しっぱなしの連打は 1 回に数える\nscoreboard players reset @s bmp4.use\nexecute if score @s bmp4.cd matches 1.. run return run scoreboard players set @s bmp4.cd 5\nscoreboard players set @s bmp4.cd 5\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"place\"}] run return run function blockmp4:place\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"toggle\"}] run return run function blockmp4:toggle\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"stop\"}] run return run function blockmp4:stop\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"back\"}] if predicate blockmp4:sneaking run return run function blockmp4:skip_frame {f:-1}\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"back\"}] run return run function blockmp4:skip {t:-10}\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"fwd\"}] if predicate blockmp4:sneaking run return run function blockmp4:skip_frame {f:1}\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"fwd\"}] run return run function blockmp4:skip {t:10}\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"next\"}] run return run function blockmp4:next\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"undo\"}] run return run function blockmp4:undo\nexecute if items entity @s weapon.mainhand *[custom_data~{bmp4:\"remove\"}] run return run function blockmp4:remove\n","data/blockmp4/function/load.mcfunction":"# 読み込み（起動時・/reload）。blockmp4 のデータパックが何個入っていても同じ結果になる\nscoreboard objectives add bmp4 dummy\nscoreboard objectives add bmp4.f dummy\nscoreboard objectives add bmp4.t dummy\nscoreboard objectives add bmp4.st dummy\nscoreboard objectives add bmp4.n dummy\nscoreboard objectives add bmp4.fps dummy\nscoreboard objectives add bmp4.k dummy\nscoreboard objectives add bmp4.dir dummy\nscoreboard objectives add bmp4.id dummy\nscoreboard objectives add bmp4.seq dummy\nscoreboard objectives add bmp4.b dummy\nscoreboard objectives add bmp4.life dummy\nscoreboard objectives add bmp4.cd dummy\nscoreboard objectives add bmp4.use minecraft.used:minecraft.carrot_on_a_stick\nscoreboard players set #20 bmp4 20\nscoreboard players set #5 bmp4 5\nscoreboard players set #4 bmp4 4\nscoreboard players set #-1 bmp4 -1\n\n# 読み込んだフレームの量（サーバーは /reload まで覚えている）。上限を超えたら reload して空ける（core/flush）\nscoreboard players set #mem bmp4 0\nexecute unless score #limit bmp4 matches 0.. run scoreboard players set #limit bmp4 1024\nfunction blockmp4:core/budget\n\n# 動画の一覧: 1.0.0 の形式（registry、全部を置き換える）を先に、データパックごとの登録（#blockmp4:register、\n# 足していくだけ）を後に。選んでいた動画は名前で引き直す（作り直されていれば中身が変わっているため）\ndata modify storage blockmp4:main videos set value []\nfunction #blockmp4:legacy\nfunction #blockmp4:register\ndata modify storage blockmp4:main old set from storage blockmp4:main sel\ndata remove storage blockmp4:main sel\nexecute if data storage blockmp4:main old.v run function blockmp4:core/reselect with storage blockmp4:main old\nexecute unless data storage blockmp4:main sel run data modify storage blockmp4:main sel set from storage blockmp4:main videos[0]\ndata remove storage blockmp4:main old\n","data/blockmp4/function/memory.mcfunction":"# /function blockmp4:memory {mb:1024} — 読み込んだフレームの上限（MB）。超えたら reload して空ける。0 で空けない\n$scoreboard players set #limit bmp4 $(mb)\nexecute if score #limit bmp4 matches ..-1 run scoreboard players set #limit bmp4 0\nfunction blockmp4:core/budget\ntitle @s actionbar [{score:{name:\"#limit\",objective:\"bmp4\"}},{text:\" MB\"}]\n","data/blockmp4/function/next.mcfunction":"# 次の動画を選ぶ（次の /function blockmp4:place で置く動画）\nexecute unless data storage blockmp4:main videos[0] run return run title @s actionbar {text:\"動画がありません\",color:\"red\"}\ndata modify storage blockmp4:main tmp set from storage blockmp4:main videos\nexecute store result score #n bmp4 run data get storage blockmp4:main tmp\nfunction blockmp4:core/next_rot\ndata modify storage blockmp4:main tmp append from storage blockmp4:main tmp[0]\ndata modify storage blockmp4:main sel set from storage blockmp4:main tmp[1]\ndata remove storage blockmp4:main tmp\ntitle @s actionbar [{nbt:\"sel.v\",storage:\"blockmp4:main\",color:\"yellow\"},\"  \",{nbt:\"sel.w\",storage:\"blockmp4:main\"},\"×\",{nbt:\"sel.h\",storage:\"blockmp4:main\"}]\n","data/blockmp4/function/pause.mcfunction":"# いちばん近いスクリーンを一時停止\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] run function blockmp4:core/pause\n","data/blockmp4/function/place.mcfunction":"# 地面を見て実行: 見ているブロックの上を左奥の角に、手前と右へ広がる範囲をパーティクルで出す。\n# 同じ所・同じ向きでもう一度実行すると置く（最初のフレームが出て、止まった状態）。\nexecute unless data storage blockmp4:main sel.v run return run title @s actionbar {text:\"動画がありません\",color:\"red\"}\nexecute unless score @s bmp4.id matches 1.. store result score @s bmp4.id run scoreboard players add #id bmp4 1\nscoreboard players operation #pid bmp4 = @s bmp4.id\nfunction blockmp4:core/facing\nkill @e[type=marker,tag=bmp4.new]\nscoreboard players set #r bmp4 1600\nexecute anchored eyes positioned ^ ^ ^ run function blockmp4:core/ray\nexecute unless entity @e[type=marker,tag=bmp4.new] run return run title @s actionbar {text:\"ブロックが見つかりません\",color:\"red\"}\nscoreboard players set #built bmp4 0\nexecute as @e[type=marker,tag=bmp4.new,limit=1] at @s run function blockmp4:core/place_at\nexecute if score #built bmp4 matches 0 run title @s actionbar [{nbt:\"sel.v\",storage:\"blockmp4:main\",color:\"yellow\"},\"  \",{nbt:\"sel.w\",storage:\"blockmp4:main\"},\"×\",{nbt:\"sel.h\",storage:\"blockmp4:main\"}]\n","data/blockmp4/function/remove.mcfunction":"# いちばん近いスクリーンを撤去（ブロックを空気に戻す）\nexecute unless entity @e[type=marker,tag=bmp4.screen,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/clear\n","data/blockmp4/function/resume.mcfunction":"# いちばん近いスクリーンを続きから再生（止めてあれば最初から）\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/resume\n","data/blockmp4/function/seek.mcfunction":"# /function blockmp4:seek {t:秒} — いちばん近いスクリーンをその時刻へ（小数も可: {t:12.5}）。再生中ならそのまま続く\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\n$data modify storage blockmp4:main arg set value $(t)\nexecute store result score #t bmp4 run data get storage blockmp4:main arg 20\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/seek_show\nfunction blockmp4:core/show_time\n","data/blockmp4/function/seek_frame.mcfunction":"# /function blockmp4:seek_frame {f:フレーム} — いちばん近いスクリーンをそのフレームへ（0 から数える）\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\n$scoreboard players set #fr bmp4 $(f)\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/seek_frame\nfunction blockmp4:core/show_time\n","data/blockmp4/function/skip.mcfunction":"# /function blockmp4:skip {t:秒} — いちばん近いスクリーンを今の位置から進める（負なら戻す。小数も可: {t:-2.5}）\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\n$data modify storage blockmp4:main arg set value $(t)\nexecute store result score #d bmp4 run data get storage blockmp4:main arg 20\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/skip\nfunction blockmp4:core/show_time\n","data/blockmp4/function/skip_frame.mcfunction":"# /function blockmp4:skip_frame {f:フレーム数} — いちばん近いスクリーンを今のフレームから進める（負なら戻す）\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\n$scoreboard players set #d bmp4 $(f)\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/skip_frame\nfunction blockmp4:core/show_time\n","data/blockmp4/function/start.mcfunction":"# いちばん近いスクリーンを最初から再生\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/start\n","data/blockmp4/function/stop.mcfunction":"# いちばん近いスクリーンを止めて、最初のフレームに戻す\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/stop\n","data/blockmp4/function/tick.mcfunction":"# 毎 tick: 杖、下見の枠、チャンクの読み込みを待つスクリーン、再生中のスクリーン。\n# データパックが複数入っていても 1 tick に 1 回だけ動く\nexecute store result score #now bmp4 run time query gametime\nexecute if score #now bmp4 = #tick bmp4 run return 0\nscoreboard players operation #tick bmp4 = #now bmp4\nexecute as @a[scores={bmp4.use=1..}] at @s run function blockmp4:core/wand\nscoreboard players remove @a[scores={bmp4.cd=1..}] bmp4.cd 1\nexecute as @e[type=marker,tag=bmp4.preview] at @s run function blockmp4:core/preview\nexecute as @e[type=marker,tag=bmp4.wait] at @s run function blockmp4:core/wait\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,scores={bmp4.st=1}] at @s run function blockmp4:core/play\nexecute if score #limit bmp4 matches 1.. if score #mem bmp4 >= #budget bmp4 run function blockmp4:core/flush\n","data/blockmp4/function/toggle.mcfunction":"# 再生 / 一時停止の切り替え（止めてあれば最初から再生）\nexecute unless entity @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024] run return run title @s actionbar {text:\"近くにスクリーンがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen,tag=!bmp4.wait,distance=..1024,sort=nearest,limit=1] at @s run function blockmp4:core/toggle\n","data/blockmp4/function/undo.mcfunction":"# 取り消し: 自分の下見（枠）があればそれを消す。無ければ、自分が最後に置いたスクリーンを外して元の地形に戻す\n# （続けて実行すると、その前に置いた物も順に）\nexecute unless score @s bmp4.id matches 1.. run return run title @s actionbar {text:\"取り消すものがありません\",color:\"red\"}\nscoreboard players operation #pid bmp4 = @s bmp4.id\nscoreboard players set #done bmp4 0\nexecute as @e[type=marker,tag=bmp4.preview] if score @s bmp4.id = #pid bmp4 store success score #done bmp4 run kill @s\nexecute if score #done bmp4 matches 1 run return 0\nscoreboard players set #best bmp4 0\nexecute as @e[type=marker,tag=bmp4.screen] if score @s bmp4.id = #pid bmp4 if score @s bmp4.seq > #best bmp4 run scoreboard players operation #best bmp4 = @s bmp4.seq\nexecute if score #best bmp4 matches 0 run return run title @s actionbar {text:\"取り消すものがありません\",color:\"red\"}\nexecute as @e[type=marker,tag=bmp4.screen] if score @s bmp4.id = #pid bmp4 if score @s bmp4.seq = #best bmp4 at @s run function blockmp4:core/clear\n","data/blockmp4/function/uninstall.mcfunction":"# 片付け: すべてのスクリーンを撤去して元の地形に戻し、スコアと記憶を消す。この後データパックを外す\n# （スクリーンのあるチャンクが読み込まれていないと、そのスクリーンは戻せない）\nexecute as @e[type=marker,tag=bmp4.screen] at @s run function blockmp4:core/clear\nkill @e[type=marker,tag=bmp4.preview]\nkill @e[type=marker,tag=bmp4.new]\nscoreboard objectives remove bmp4\nscoreboard objectives remove bmp4.f\nscoreboard objectives remove bmp4.t\nscoreboard objectives remove bmp4.st\nscoreboard objectives remove bmp4.n\nscoreboard objectives remove bmp4.fps\nscoreboard objectives remove bmp4.k\nscoreboard objectives remove bmp4.dir\nscoreboard objectives remove bmp4.id\nscoreboard objectives remove bmp4.seq\nscoreboard objectives remove bmp4.b\nscoreboard objectives remove bmp4.life\nscoreboard objectives remove bmp4.cd\nscoreboard objectives remove bmp4.use\ndata remove storage blockmp4:main sel\ndata remove storage blockmp4:main videos\n","data/blockmp4/function/wand.mcfunction":"# 杖を渡す。持って右クリックで、それぞれの関数を実行する（対象はいちばん近いスクリーン）\ngive @s carrot_on_a_stick[custom_data={bmp4:\"place\"},item_model=\"minecraft:painting\",item_name={text:\"設置\",color:\"aqua\"},lore=[{text:\"地面を見て: 範囲を出す / 同じ所でもう一度: 置く\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"toggle\"},item_model=\"minecraft:lime_dye\",item_name={text:\"再生 / 一時停止\",color:\"green\"}]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"stop\"},item_model=\"minecraft:red_dye\",item_name={text:\"停止\",color:\"red\"},lore=[{text:\"最初のフレームに戻る\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"back\"},item_model=\"minecraft:spectral_arrow\",item_name={text:\"戻る\",color:\"gold\"},lore=[{text:\"10 秒 / しゃがんで: 1 フレーム\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"fwd\"},item_model=\"minecraft:arrow\",item_name={text:\"進む\",color:\"gold\"},lore=[{text:\"10 秒 / しゃがんで: 1 フレーム\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"next\"},item_model=\"minecraft:book\",item_name={text:\"動画を切り替える\",color:\"yellow\"},lore=[{text:\"次に置く動画\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"undo\"},item_model=\"minecraft:recovery_compass\",item_name={text:\"取り消し\",color:\"light_purple\"},lore=[{text:\"枠を消す / 最後に置いたスクリーンを外して元の地形に戻す\",color:\"gray\",italic:false}]]\ngive @s carrot_on_a_stick[custom_data={bmp4:\"remove\"},item_model=\"minecraft:barrier\",item_name={text:\"撤去\",color:\"dark_red\"},lore=[{text:\"いちばん近いスクリーン。元の地形に戻す\",color:\"gray\",italic:false}]]\n","data/blockmp4/predicate/sneaking.json":"{\n  \"type\": \"minecraft:entity_properties\",\n  \"entity\": \"this\",\n  \"predicate\": {\n    \"minecraft:flags\": {\n      \"is_sneaking\": true\n    }\n  }\n}\n","data/blockmp4/tags/block/pass.json":"{\n  \"values\": [\n    \"#minecraft:replaceable\",\n    {\"id\": \"#minecraft:flowers\", \"required\": false},\n    {\"id\": \"#minecraft:saplings\", \"required\": false}\n  ]\n}\n","data/blockmp4/tags/function/legacy.json":"{\n  \"values\": [\n    {\"id\": \"blockmp4:registry\", \"required\": false}\n  ]\n}\n","data/blockmp4/tags/function/register.json":"{\n  \"values\": []\n}\n","data/minecraft/tags/function/load.json":"{\n  \"values\": [\"blockmp4:load\"]\n}\n","data/minecraft/tags/function/tick.json":"{\n  \"values\": [\"blockmp4:tick\"]\n}\n"}}</script>
+<script>
+(() => {
+'use strict';
+const DATA = JSON.parse(document.getElementById('bmp4-data').textContent);
+
+// ---- 色（tools/bmp4_color.py と同じ式）。比べるのは OKLab、平均を取るのは線形の光の量 ----
+
+const SRGB_TO_LINEAR = (() => {
+  const t = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const c = i / 255;
+    t[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  return t;
+})();
+
+// 線形 RGB → OKLab。out[o..o+2] に書く（読んでから書くので、同じ配列でもよい）
+function linearToOklab(r, g, b, out, o) {
+  const l = Math.cbrt(Math.max(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b, 0));
+  const m = Math.cbrt(Math.max(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b, 0));
+  const s = Math.cbrt(Math.max(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b, 0));
+  out[o] = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  out[o + 1] = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  out[o + 2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+}
+
+// 片方の軸の重み。縮めるときは重なる面積（cv2.INTER_AREA）、広げるときは線形
+function axisWeights(src, dst) {
+  const idx = [], wt = [], start = new Int32Array(dst + 1);
+  const scale = src / dst;
+  for (let d = 0; d < dst; d++) {
+    start[d] = idx.length;
+    if (scale >= 1) {
+      const a = d * scale, b = (d + 1) * scale;
+      for (let i = Math.floor(a); i < Math.min(src, Math.ceil(b)); i++) {
+        const w = Math.min(b, i + 1) - Math.max(a, i);
+        if (w > 1e-9) { idx.push(i); wt.push(w / scale); }
+      }
+    } else {
+      let x = Math.max(0, (d + 0.5) * scale - 0.5);
+      let i = Math.floor(x), f = x - i;
+      if (i >= src - 1) { i = src - 1; f = 0; }
+      idx.push(i); wt.push(1 - f);
+      if (f > 0) { idx.push(i + 1); wt.push(f); }
+    }
+  }
+  start[dst] = idx.length;
+  return { start, idx: Int32Array.from(idx), wt: Float32Array.from(wt) };
+}
+
+// RGBA（sw×sh）→ w×h の OKLab（画素ごとに L, a, b）。tools/bmp4_video.py の frame_to_lab と同じく、
+// 縮小は線形の光の量で平均する。ちょうど 4 倍なら 4×4 の平均（大きい動画は先に 4 倍まで縮めて渡す）
+function rgbaToLab(rgba, sw, sh, w, h) {
+  const lin = new Float32Array(w * h * 3);
+  const L = SRGB_TO_LINEAR;
+  if (sw === 4 * w && sh === 4 * h) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let dy = 0; dy < 4; dy++) {
+          let p = ((4 * y + dy) * sw + 4 * x) * 4;
+          for (let dx = 0; dx < 4; dx++, p += 4) {
+            r += L[rgba[p]]; g += L[rgba[p + 1]]; b += L[rgba[p + 2]];
+          }
+        }
+        const o = (y * w + x) * 3;
+        lin[o] = r / 16; lin[o + 1] = g / 16; lin[o + 2] = b / 16;
+      }
+    }
+  } else if (sw === 2 * w && sh === 2 * h) {   // 見本（2 倍から）
+    for (let y = 0; y < h; y++) {
+      for (let x = 0, p = 2 * y * sw * 4, q = p + sw * 4; x < w; x++, p += 8, q += 8) {
+        const o = (y * w + x) * 3;
+        lin[o] = (L[rgba[p]] + L[rgba[p + 4]] + L[rgba[q]] + L[rgba[q + 4]]) / 4;
+        lin[o + 1] = (L[rgba[p + 1]] + L[rgba[p + 5]] + L[rgba[q + 1]] + L[rgba[q + 5]]) / 4;
+        lin[o + 2] = (L[rgba[p + 2]] + L[rgba[p + 6]] + L[rgba[q + 2]] + L[rgba[q + 6]]) / 4;
+      }
+    }
+  } else {
+    const ax = axisWeights(sw, w), ay = axisWeights(sh, h);
+    const tmp = new Float32Array(w * sh * 3);
+    for (let y = 0; y < sh; y++) {
+      const row = y * sw * 4;
+      for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let k = ax.start[x]; k < ax.start[x + 1]; k++) {
+          const p = row + ax.idx[k] * 4, q = ax.wt[k];
+          r += L[rgba[p]] * q; g += L[rgba[p + 1]] * q; b += L[rgba[p + 2]] * q;
+        }
+        const o = (y * w + x) * 3;
+        tmp[o] = r; tmp[o + 1] = g; tmp[o + 2] = b;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0;
+        for (let k = ay.start[y]; k < ay.start[y + 1]; k++) {
+          const o = (ay.idx[k] * w + x) * 3, q = ay.wt[k];
+          r += tmp[o] * q; g += tmp[o + 1] * q; b += tmp[o + 2] * q;
+        }
+        const o = (y * w + x) * 3;
+        lin[o] = r; lin[o + 1] = g; lin[o + 2] = b;
+      }
+    }
+  }
+  for (let o = 0; o < lin.length; o += 3) linearToOklab(lin[o], lin[o + 1], lin[o + 2], lin, o);
+  return lin;
+}
+
+// ---- 量子化（tools/bmp4_video.py の Hold・Quantizer と同じ考え方） ----
+// 画素ごとに「近いブロック 2 つと混ぜる割合」を求め、ブルーノイズの閾値でどちらを置くか決める。
+// 閾値は位置だけで決まるので、同じ絵なら同じブロックになる（止まった所は差分が出ない）。
+
+const NOISE_SIDE = 64;
+let NOISE_TILE = null;
+
+// ブルーノイズの閾値（0..1、64×64）。exe と同じタイル（ツールが作った順位を埋め込んである）
+function noiseTile() {
+  if (!NOISE_TILE) {
+    const raw = atob(DATA.noise), n = NOISE_SIDE * NOISE_SIDE;
+    NOISE_TILE = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const rank = raw.charCodeAt(2 * i) | (raw.charCodeAt(2 * i + 1) << 8);
+      NOISE_TILE[i] = (rank + 0.5) / n;
+    }
+  }
+  return NOISE_TILE;
+}
+
+// 入力の色の不感帯。前のフレームから hold（OKLab の距離）未満しか動いていない画素は前の色のまま
+class Hold {
+  constructor(hold) {
+    this.hold = +hold;
+    this.prev = null;
+  }
+
+  apply(lab) {
+    if (!this.prev || this.hold <= 0 || this.prev.length !== lab.length) {
+      this.prev = lab.slice();
+      return lab;
+    }
+    const p = this.prev, h2 = this.hold * this.hold;
+    for (let o = 0; o < lab.length; o += 3) {
+      const a = lab[o] - p[o], b = lab[o + 1] - p[o + 1], c = lab[o + 2] - p[o + 2];
+      if (a * a + b * b + c * c >= h2) {
+        p[o] = lab[o]; p[o + 1] = lab[o + 1]; p[o + 2] = lab[o + 2];
+      }
+    }
+    return p.slice();
+  }
+}
+
+// OKLab を 64³ に区切った表で「使う 2 つのブロック」を引く。割合は画素ごとに 2 色への射影で出すので、
+// 表の粗さで段はできない。表は使った区切りだけ、初めて出てきたときに埋める
+const GRID = 64;
+const LAB_LO = [0.0, -0.24, -0.32];   // sRGB の色が収まる OKLab の範囲
+const LAB_HI = [1.0, 0.28, 0.22];
+
+class Quantizer {
+  constructor(entries, { dither = 'ordered', spread = 0.25, noise = 0, tone = false, candidates = 8 } = {}) {
+    const n = entries.length;
+    this.n = n;
+    this.lab = new Float64Array(n * 3);
+    this.noise2 = new Float64Array(n);
+    let lmin = Infinity, lmax = -Infinity;
+    entries.forEach((e, i) => {
+      this.lab.set(e.lab, 3 * i);
+      this.noise2[i] = noise * e.noise * e.noise;
+      lmin = Math.min(lmin, e.lab[0]);
+      lmax = Math.max(lmax, e.lab[0]);
+    });
+    this.lmin = lmin;
+    this.lmax = lmax;
+    this.lightnessOnly = n <= 2;   // ランプ: 明るさだけで選ぶ
+    this.tone = tone;              // 明るさをパレットの明るさの幅に合わせる（銅の電球・ランプ）
+    this.ordered = dither === 'ordered';
+    this.spread = +spread;         // 離れた 2 色を混ぜる罰
+    this.k = Math.max(1, Math.min(candidates, n));
+    this.lutI = new Int16Array(GRID * GRID * GRID).fill(-1);
+    this.lutJ = new Int16Array(GRID * GRID * GRID);
+    this.thr = noiseTile();
+    this.d2 = new Float64Array(n);
+    this.cand = new Int32Array(this.k);
+  }
+
+  // 区切り cell の真ん中の色に、混ぜて一番近くなる 2 つ（罰込み）を表に書く
+  fill(cell) {
+    const g = GRID, n = this.n, lab = this.lab, d2 = this.d2, noise2 = this.noise2;
+    const q0 = Math.floor(cell / (g * g)), q1 = Math.floor(cell / g) % g, q2 = cell % g;
+    const x0 = LAB_LO[0] + (q0 + 0.5) * (LAB_HI[0] - LAB_LO[0]) / g;
+    const x1 = LAB_LO[1] + (q1 + 0.5) * (LAB_HI[1] - LAB_LO[1]) / g;
+    const x2 = LAB_LO[2] + (q2 + 0.5) * (LAB_HI[2] - LAB_LO[2]) / g;
+    for (let e = 0; e < n; e++) {
+      const a = x0 - lab[3 * e], b = x1 - lab[3 * e + 1], c = x2 - lab[3 * e + 2];
+      d2[e] = a * a + b * b + c * c + noise2[e];
+    }
+    if (!this.ordered || this.k === 1) {
+      let best = 0;
+      for (let e = 1; e < n; e++) if (d2[e] < d2[best]) best = e;
+      this.lutI[cell] = this.lutJ[cell] = best;
+      return;
+    }
+    // 近い k 個（近い順）
+    const k = this.k, cand = this.cand;
+    let m = 0;
+    for (let e = 0; e < n; e++) {
+      const v = d2[e];
+      let p;
+      if (m < k) p = m++;
+      else if (v < d2[cand[k - 1]]) p = k - 1;
+      else continue;
+      while (p > 0 && d2[cand[p - 1]] > v) { cand[p] = cand[p - 1]; p--; }
+      cand[p] = e;
+    }
+    let bestErr = Infinity, bi = cand[0], bj = cand[0];
+    for (let p = 0; p < k; p++) {
+      const i = cand[p], i3 = 3 * i, ni = noise2[i];
+      for (let q = 0; q < k; q++) {
+        const j = cand[q], j3 = 3 * j, nj = noise2[j];
+        const v0 = lab[i3] - lab[j3], v1 = lab[i3 + 1] - lab[j3 + 1], v2 = lab[i3 + 2] - lab[j3 + 2];
+        const dd = v0 * v0 + v1 * v1 + v2 * v2;
+        let r = 1;   // i の割合
+        if (dd > 1e-12) {
+          r = ((x0 - lab[j3]) * v0 + (x1 - lab[j3 + 1]) * v1 + (x2 - lab[j3 + 2]) * v2) / dd;
+          r = r < 0 ? 0 : r > 1 ? 1 : r;
+        }
+        const m0 = x0 - (lab[j3] + r * v0), m1 = x1 - (lab[j3 + 1] + r * v1), m2 = x2 - (lab[j3 + 2] + r * v2);
+        const err = m0 * m0 + m1 * m1 + m2 * m2 + this.spread * r * (1 - r) * dd + r * ni + (1 - r) * nj;
+        if (err < bestErr) { bestErr = err; bi = i; bj = j; }
+      }
+    }
+    // 2 つの向きをそろえる（番号の小さい方を i）。区切りごとに向きが変わると、同じ 2 色の境目で
+    // 閾値の使い方が裏返り、ディザの模様が切り替わるため
+    if (bi > bj) { const t = bi; bi = bj; bj = t; }
+    this.lutI[cell] = bi;
+    this.lutJ[cell] = bj;
+  }
+
+  // OKLab の画像（w×h）→ ブロックの番号（Uint16Array、行ごと）
+  quantize(lab, w, h) {
+    const out = new Uint16Array(w * h), thr = this.thr, P = this.lab;
+    const tone = this.tone, lmin = this.lmin, span = this.lmax - this.lmin;
+    if (this.lightnessOnly) {
+      let i = 0, j = 0;
+      for (let e = 1; e < this.n; e++) {
+        if (P[3 * e] > P[3 * i]) i = e;
+        if (P[3 * e] < P[3 * j]) j = e;
+      }
+      const li = P[3 * i], lj = P[3 * j], dv = li - lj, dd = dv * dv;
+      for (let y = 0, p = 0; y < h; y++) {
+        const row = (y & 63) << 6;
+        for (let x = 0; x < w; x++, p++) {
+          let v = lab[3 * p];
+          if (tone) v = lmin + (v < 0 ? 0 : v > 1 ? 1 : v) * span;
+          if (!this.ordered) { out[p] = Math.abs(v - li) <= Math.abs(v - lj) ? i : j; continue; }
+          let r = 1;
+          if (dd > 1e-12) { r = (v - lj) * dv / dd; r = r < 0 ? 0 : r > 1 ? 1 : r; }
+          out[p] = thr[row | (x & 63)] < r ? i : j;
+        }
+      }
+      return out;
+    }
+    const g = GRID, lutI = this.lutI, lutJ = this.lutJ;
+    const s0 = g / (LAB_HI[0] - LAB_LO[0]), s1 = g / (LAB_HI[1] - LAB_LO[1]), s2 = g / (LAB_HI[2] - LAB_LO[2]);
+    for (let y = 0, p = 0; y < h; y++) {
+      const row = (y & 63) << 6;
+      for (let x = 0; x < w; x++, p++) {
+        let L = lab[3 * p];
+        const a = lab[3 * p + 1], b = lab[3 * p + 2];
+        if (tone) L = lmin + (L < 0 ? 0 : L > 1 ? 1 : L) * span;
+        let c0 = Math.trunc((L - LAB_LO[0]) * s0), c1 = Math.trunc((a - LAB_LO[1]) * s1), c2 = Math.trunc((b - LAB_LO[2]) * s2);
+        c0 = c0 < 0 ? 0 : c0 >= g ? g - 1 : c0;
+        c1 = c1 < 0 ? 0 : c1 >= g ? g - 1 : c1;
+        c2 = c2 < 0 ? 0 : c2 >= g ? g - 1 : c2;
+        const cell = (c0 * g + c1) * g + c2;
+        if (lutI[cell] < 0) this.fill(cell);
+        const i = lutI[cell], j = lutJ[cell];
+        if (!this.ordered || i === j) { out[p] = i; continue; }
+        const i3 = 3 * i, j3 = 3 * j;
+        const v0 = P[i3] - P[j3], v1 = P[i3 + 1] - P[j3 + 1], v2 = P[i3 + 2] - P[j3 + 2];
+        const dd = v0 * v0 + v1 * v1 + v2 * v2;
+        let r = 1;
+        if (dd > 1e-12) {
+          r = ((L - P[j3]) * v0 + (a - P[j3 + 1]) * v1 + (b - P[j3 + 2]) * v2) / dd;
+          r = r < 0 ? 0 : r > 1 ? 1 : r;
+        }
+        out[p] = thr[row | (x & 63)] < r ? i : j;
+      }
+    }
+    return out;
+  }
+}
+
+// ---- 構造物（.nbt）。tools/bmp4_nbt.py の structure_bytes と同じバイト列 ----
+//   {DataVersion, size:[x,y,z], palette:[{id, properties}], blocks:[{pos:[x,y,z], state}], entities:[]}
+// パレットのキーは版で違う（26.3 から {id, properties}）。ツールが jar から決めた物を埋め込んである。
+
+const TAG_END = 0, TAG_INT = 3, TAG_STRING = 8, TAG_LIST = 9, TAG_COMPOUND = 10;
+const UTF8 = new TextEncoder();
+
+class Bytes {
+  constructor(size = 1024) {
+    this.buf = new Uint8Array(size);
+    this.n = 0;
+  }
+
+  room(k) {
+    if (this.n + k <= this.buf.length) return;
+    const next = new Uint8Array(Math.max(this.buf.length * 2, this.n + k));
+    next.set(this.buf.subarray(0, this.n));
+    this.buf = next;
+  }
+
+  u8(v) { this.room(1); this.buf[this.n++] = v; }
+  u16(v) { this.room(2); this.buf[this.n++] = (v >> 8) & 255; this.buf[this.n++] = v & 255; }
+  i32(v) {
+    this.room(4);
+    this.buf[this.n++] = (v >>> 24) & 255; this.buf[this.n++] = (v >>> 16) & 255;
+    this.buf[this.n++] = (v >>> 8) & 255; this.buf[this.n++] = v & 255;
+  }
+  raw(a) { this.room(a.length); this.buf.set(a, this.n); this.n += a.length; }
+  str(s) { const b = UTF8.encode(s); this.u16(b.length); this.raw(b); }
+  name(tag, s) { this.u8(tag); this.str(s); }
+  out() { return this.buf.subarray(0, this.n); }
+}
+
+// 1 ブロック分: {pos:[x,y,z] (TAG_Int の TAG_List), state:int} = 36 バイト
+const BLOCK_SIZE = 36;
+const BLOCK_TEMPLATE = (() => {
+  const b = new Bytes(64);
+  b.name(TAG_LIST, 'pos'); b.u8(TAG_INT); b.i32(3);   // 11
+  b.i32(0); b.i32(0); b.i32(0);                         // x y z（23 まで）
+  b.name(TAG_INT, 'state'); b.i32(0);                  // 8 + 4（35 まで）
+  b.u8(TAG_END);
+  return b.out().slice();
+})();
+
+// size: [x,y,z]。palette: [[名前, {状態}]]。xs/ys/zs/states: 同じ長さ n の整数列。keys: [名前, 状態] のキー
+function structureBytes(size, palette, xs, ys, zs, states, n, dataVersion, keys) {
+  const head = new Bytes();
+  head.u8(TAG_COMPOUND); head.u16(0);
+  head.name(TAG_INT, 'DataVersion'); head.i32(dataVersion);
+  head.name(TAG_LIST, 'size'); head.u8(TAG_INT); head.i32(3);
+  head.i32(size[0]); head.i32(size[1]); head.i32(size[2]);
+  head.name(TAG_LIST, 'palette'); head.u8(TAG_COMPOUND); head.i32(palette.length);
+  for (const [name, props] of palette) {
+    head.name(TAG_STRING, keys[0]); head.str(name);
+    const ks = Object.keys(props).sort();
+    if (ks.length) {
+      head.name(TAG_COMPOUND, keys[1]);
+      for (const k of ks) { head.name(TAG_STRING, k); head.str(String(props[k])); }
+      head.u8(TAG_END);
+    }
+    head.u8(TAG_END);
+  }
+  head.name(TAG_LIST, 'blocks'); head.u8(TAG_COMPOUND); head.i32(n);
+  const tail = new Bytes(32);
+  tail.name(TAG_LIST, 'entities'); tail.u8(TAG_END); tail.i32(0);
+  tail.u8(TAG_END);
+
+  const h = head.out(), t = tail.out();
+  const out = new Uint8Array(h.length + n * BLOCK_SIZE + t.length);
+  out.set(h, 0);
+  const base = h.length;
+  if (n > 0) {
+    out.set(BLOCK_TEMPLATE, base);
+    for (let done = 1; done < n; done *= 2) {
+      const k = Math.min(done, n - done);
+      out.copyWithin(base + done * BLOCK_SIZE, base, base + k * BLOCK_SIZE);
+    }
+    const dv = new DataView(out.buffer);
+    for (let i = 0, o = base; i < n; i++, o += BLOCK_SIZE) {
+      dv.setInt32(o + 11, xs[i]);
+      dv.setInt32(o + 15, ys[i]);
+      dv.setInt32(o + 19, zs[i]);
+      dv.setInt32(o + 31, states[i]);
+    }
+  }
+  out.set(t, base + n * BLOCK_SIZE);
+  return out;
+}
+
+async function gzip(data) {
+  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// ---- ZIP。中身は無圧縮で入れる（構造物はもう gzip 済み）。Minecraft は datapacks に置いた zip を
+// そのままデータパックとして読む。ファイルが 65535 個・4 GB を超えるときは ZIP64 で書く ----
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(data) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function setU64(dv, o, v) {
+  dv.setUint32(o, v % 0x100000000, true);
+  dv.setUint32(o + 4, Math.floor(v / 0x100000000), true);
+}
+
+class ZipWriter {
+  constructor(date = new Date()) {
+    this.blobs = [];      // 書き終えた分（大きい動画でもメモリに抱え込まないよう、少しずつ Blob にまとめる）
+    this.parts = [];
+    this.partBytes = 0;
+    this.offset = 0;
+    this.entries = [];
+    this.time = (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
+    this.date = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  }
+
+  push(u8) {
+    this.parts.push(u8);
+    this.partBytes += u8.length;
+    this.offset += u8.length;
+    if (this.partBytes >= 32 << 20) this.pack();
+  }
+
+  pack() {
+    if (this.parts.length) this.blobs.push(new Blob(this.parts));
+    this.parts = [];
+    this.partBytes = 0;
+  }
+
+  add(name, data) {
+    if (typeof data === 'string') data = UTF8.encode(data);
+    const nb = UTF8.encode(name), crc = crc32(data), utf = /[^\x00-\x7f]/.test(name);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true);
+    h.setUint16(4, 20, true);
+    h.setUint16(6, utf ? 0x800 : 0, true);
+    h.setUint16(8, 0, true);              // 無圧縮
+    h.setUint16(10, this.time, true);
+    h.setUint16(12, this.date, true);
+    h.setUint32(14, crc, true);
+    h.setUint32(18, data.length, true);
+    h.setUint32(22, data.length, true);
+    h.setUint16(26, nb.length, true);
+    h.setUint16(28, 0, true);
+    this.entries.push({ nb, crc, size: data.length, offset: this.offset, utf });
+    this.push(new Uint8Array(h.buffer));
+    this.push(nb);
+    this.push(data);
+  }
+
+  get size() { return this.offset; }
+
+  finish() {
+    const cdStart = this.offset;
+    for (const e of this.entries) {
+      const big = e.offset >= 0xFFFFFFFF;
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true);
+      c.setUint16(4, big ? 45 : 20, true);
+      c.setUint16(6, big ? 45 : 20, true);
+      c.setUint16(8, e.utf ? 0x800 : 0, true);
+      c.setUint16(10, 0, true);
+      c.setUint16(12, this.time, true);
+      c.setUint16(14, this.date, true);
+      c.setUint32(16, e.crc, true);
+      c.setUint32(20, e.size, true);
+      c.setUint32(24, e.size, true);
+      c.setUint16(28, e.nb.length, true);
+      c.setUint16(30, big ? 12 : 0, true);
+      c.setUint32(42, big ? 0xFFFFFFFF : e.offset, true);
+      this.push(new Uint8Array(c.buffer));
+      this.push(e.nb);
+      if (big) {
+        const x = new DataView(new ArrayBuffer(12));
+        x.setUint16(0, 0x0001, true);
+        x.setUint16(2, 8, true);
+        setU64(x, 4, e.offset);
+        this.push(new Uint8Array(x.buffer));
+      }
+    }
+    const cdSize = this.offset - cdStart, count = this.entries.length;
+    if (count >= 0xFFFF || cdStart >= 0xFFFFFFFF || cdSize >= 0xFFFFFFFF) {
+      const at = this.offset;
+      const z = new DataView(new ArrayBuffer(56));
+      z.setUint32(0, 0x06064b50, true);
+      setU64(z, 4, 44);
+      z.setUint16(12, 45, true);
+      z.setUint16(14, 45, true);
+      setU64(z, 24, count);
+      setU64(z, 32, count);
+      setU64(z, 40, cdSize);
+      setU64(z, 48, cdStart);
+      this.push(new Uint8Array(z.buffer));
+      const l = new DataView(new ArrayBuffer(20));
+      l.setUint32(0, 0x07064b50, true);
+      setU64(l, 8, at);
+      l.setUint32(16, 1, true);
+      this.push(new Uint8Array(l.buffer));
+    }
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(8, Math.min(count, 0xFFFF), true);
+    e.setUint16(10, Math.min(count, 0xFFFF), true);
+    e.setUint32(12, Math.min(cdSize, 0xFFFFFFFF), true);
+    e.setUint32(16, Math.min(cdStart, 0xFFFFFFFF), true);
+    this.push(new Uint8Array(e.buffer));
+    this.pack();
+    const blob = new Blob(this.blobs, { type: 'application/zip' });
+    this.blobs = [];
+    return blob;
+  }
+}
+
+// ---- データパック（tools/bmp4_pack.py と同じ形）。ZIP 1 つ = データパック 1 つ ----
+//   pack.mcmeta / blockmp4.json（控え。ゲームは読まない）
+//   data/blockmp4/...              本体（exe 版と同じ物。どのデータパックが勝っても同じ）
+//   data/bmp4_<id>/function/register.mcfunction、structure/<名前>/0.nbt 1.nbt …、base.nbt、clear.nbt
+
+const NS = 'blockmp4';
+const FORMAT = 3;
+const CHECK_SIZE = [1, 1, 1];   // 構造物の size は 1×1×1（本当の大きさは一覧の w・h・ly。README の知見 12）
+const LIGHT = ['minecraft:light', { level: '15', waterlogged: 'false' }];
+const AIR = ['minecraft:air', {}];
+const POWER_ON = ['minecraft:redstone_block', {}];   // 点けるランプの下
+const POWER_OFF = ['minecraft:smooth_stone', {}];    // 消すランプの下
+
+// 動画の名前（構造物と関数の名前になる）。a-z 0-9 _ だけ
+function safeName(text) {
+  let s = String(text).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'video';
+  if (/^[0-9]/.test(s)) s = 'v' + s;
+  return s.slice(0, 40);
+}
+
+// Python の round と同じ（ちょうど半分なら偶数へ）
+function roundHalfEven(x) {
+  const f = Math.floor(x), d = x - f;
+  if (d > 0.5) return f + 1;
+  if (d < 0.5) return f;
+  return f % 2 === 0 ? f : f + 1;
+}
+
+function randomId() {
+  const b = new Uint8Array(3);
+  crypto.getRandomValues(b);
+  return 'bmp4_' + Array.from(b, v => v.toString(16).padStart(2, '0')).join('');
+}
+
+// フレームを構造物にして ZIP に書く。キーフレーム（全部）と差分（前から変わったブロックだけ）
+class FrameWriter {
+  constructor(zip, { ns, name, entries, mode, width, height, fps, key, light, dataVersion, keys }) {
+    this.zip = zip;
+    this.ns = ns;
+    this.name = name;
+    this.states = entries.map(e => [e.n, e.p]);
+    this.mode = mode;
+    // ランプ: 下の段が動力（点灯 → レッドストーンブロック、消灯 → 滑らかな石）、上の段がランプ
+    this.layers = mode === 'lamp' ? 2 : 1;
+    this.lit = Uint8Array.from(entries, e => (e.p.lit === 'true' ? 1 : 0));
+    this.powerOn = this.states.length;
+    this.powerOff = this.states.length + 1;
+    this.states.push(POWER_ON, POWER_OFF);
+    this.w = width;
+    this.h = height;
+    this.fps = fps;
+    this.key = Math.max(1, key);
+    this.light = light;
+    this.dv = dataVersion;
+    this.keys = keys;
+    this.dir = `data/${ns}/structure/${name}/`;
+    this.prev = null;
+    this.n = 0;
+    this.blocks = 0;
+    this.bytes = 0;
+    this.used = new Float64Array(entries.length);
+    this.pos = new Int32Array(width * height);
+    this.mark = new Int32Array(this.states.length).fill(-1);
+  }
+
+  async add(idx) {
+    const w = this.w, N = w * this.h, pos = this.pos;
+    let count = 0;
+    if (this.prev === null || this.n % this.key === 0) {
+      for (let p = 0; p < N; p++) pos[p] = p;
+      count = N;
+    } else {
+      const prev = this.prev;
+      for (let p = 0; p < N; p++) if (idx[p] !== prev[p]) pos[count++] = p;
+      if (count === 0) { pos[0] = 0; count = 1; }   // 空の構造物は /place template が失敗するので 1 つ入れる
+    }
+    const total = count * this.layers;
+    const xs = new Int32Array(total), ys = new Int32Array(total), zs = new Int32Array(total), st = new Int32Array(total);
+    for (let k = 0; k < count; k++) {
+      const p = pos[k], g = idx[p], x = p % w, z = (p - x) / w;
+      if (this.layers === 2) {
+        xs[k] = x; zs[k] = z; st[k] = this.lit[g] ? this.powerOn : this.powerOff;
+        xs[count + k] = x; ys[count + k] = 1; zs[count + k] = z; st[count + k] = g;
+      } else {
+        xs[k] = x; zs[k] = z; st[k] = g;
+      }
+      this.used[g]++;
+    }
+    // パレットは使った状態だけ、番号の順（np.unique と同じ）
+    const mark = this.mark.fill(-1), uniq = [];
+    for (let k = 0; k < total; k++) if (mark[st[k]] < 0) { mark[st[k]] = 0; uniq.push(st[k]); }
+    uniq.sort((a, b) => a - b);
+    uniq.forEach((u, i) => { mark[u] = i; });
+    for (let k = 0; k < total; k++) st[k] = mark[st[k]];
+    const palette = uniq.map(u => this.states[u]);
+    await this.write(`${this.n}.nbt`, palette, xs, ys, zs, st, total);
+    this.blocks += total;
+    this.prev = idx;
+    this.n++;
+  }
+
+  async write(file, palette, xs, ys, zs, st, n) {
+    const data = await gzip(structureBytes(CHECK_SIZE, palette, xs, ys, zs, st, n, this.dv, this.keys));
+    this.zip.add(this.dir + file, data);
+    this.bytes += data.length;
+  }
+
+  // ライトの層（base、スクリーンの 1 つ上）と撤去用の空気（clear）を書き、動画の情報を返す
+  async finish() {
+    const w = this.w, N = w * this.h;
+    const layers = this.layers + (this.light ? 1 : 0);
+    const xs = new Int32Array(N), zs = new Int32Array(N);
+    for (let p = 0; p < N; p++) { xs[p] = p % w; zs[p] = (p - xs[p]) / w; }
+    if (this.light) {
+      await this.write('base.nbt', [LIGHT], xs, new Int32Array(N).fill(this.layers), zs, new Int32Array(N), N);
+    }
+    const T = N * layers;
+    const cx = new Int32Array(T), cy = new Int32Array(T), cz = new Int32Array(T);
+    for (let y = 0; y < layers; y++) {
+      cx.set(xs, y * N); cz.set(zs, y * N); cy.fill(y, y * N, (y + 1) * N);
+    }
+    await this.write('clear.nbt', [AIR], cx, cy, cz, new Int32Array(T), T);
+    // b: 1 フレームで置くブロックの平均（読み込んだフレームの量の見積もり。データパックの core/flush）
+    return {
+      v: this.name, s: `${this.ns}:${this.name}`, w: this.w, h: this.h, n: this.n,
+      fps: this.fps, k: this.key, lt: this.light ? 1 : 0, ly: layers, m: this.mode,
+      b: Math.max(1, Math.floor(this.blocks / Math.max(1, this.n))),
+    };
+  }
+}
+
+function snbt(meta) {
+  return '{' + ['v', 's', 'w', 'h', 'n', 'fps', 'k', 'lt', 'ly', 'm', 'b']
+    .map(k => (typeof meta[k] === 'string' ? `${k}:"${meta[k]}"` : `${k}:${Math.trunc(meta[k])}`))
+    .join(',') + '}';
+}
+
+// このデータパックの登録関数・登録タグ・video/<名前>.mcfunction（tools/bmp4_pack.py の write_registration）
+function registrationFiles(ns, packName, videos) {
+  const names = Object.keys(videos).sort();
+  const lines = [`# ${packName} の動画を一覧に足す（同じ名前が先に入っていれば足さない）。blockmp4 の HTML 版が書く`];
+  for (const n of names) {
+    lines.push(`execute unless data storage ${NS}:main videos[{v:"${n}"}] run `
+      + `data modify storage ${NS}:main videos append value ${snbt(videos[n])}`);
+  }
+  const files = [
+    [`data/${ns}/function/register.mcfunction`, lines.join('\n') + '\n'],
+    [`data/${NS}/tags/function/register.json`, JSON.stringify({ values: [`${ns}:register`] }, null, 2) + '\n'],
+  ];
+  for (const n of names) {
+    files.push([`data/${NS}/function/video/${n}.mcfunction`,
+      `# ${n} を選ぶ（次の /function ${NS}:place で置く動画）\n`
+      + `data modify storage ${NS}:main sel set from storage ${NS}:main videos[{v:"${n}"}]\n`
+      + `title @s actionbar {text:"${n}",color:"yellow"}\n`]);
+  }
+  return files;
+}
+
+function packMeta(names) {
+  let desc = 'blockmp4' + (names.length ? ': ' + names.join(', ') : '');
+  if (desc.length > 80) desc = desc.slice(0, 77) + '...';
+  const fmt = DATA.mc.packFormat, major = Array.isArray(fmt) ? fmt[0] : fmt;
+  const pack = { description: desc };
+  if (major >= 82) {   // 1.21.9 から min_format / max_format
+    pack.min_format = fmt;
+    pack.max_format = 1000;
+  } else {
+    pack.pack_format = major;
+    pack.supported_formats = [major, 1000];
+  }
+  return JSON.stringify({ pack }, null, 2) + '\n';
+}
+
+function stamp(d = new Date()) {
+  const p = v => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// 本体（ひな形）。登録タグは registrationFiles が書くので除く
+function templateFiles() {
+  return Object.keys(DATA.template).sort()
+    .filter(p => p !== `data/${NS}/tags/function/register.json`)
+    .map(p => [p, DATA.template[p]]);
+}
+
+// ---- MP4 / MOV を分けて、映像のサンプル（場所・大きさ・時刻・キーかどうか）を並べる（WebCodecs に渡す） ----
+// 普通の MP4（moov に表がある）と、断片の MP4（moof ごと。ブラウザの録画など）の両方を読む。
+
+async function readBytes(file, start, end) {
+  return new Uint8Array(await file.slice(start, end).arrayBuffer());
+}
+
+function fourcc(dv, o) {
+  return String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+}
+
+function u64(dv, o) {
+  return dv.getUint32(o) * 0x100000000 + dv.getUint32(o + 4);
+}
+
+// pos から始まる箱。{type, start, size, body（中身の始まり）, end}
+function boxAt(dv, pos, end) {
+  if (pos + 8 > end) return null;
+  let size = dv.getUint32(pos), hdr = 8;
+  const type = fourcc(dv, pos + 4);
+  if (size === 1) {
+    if (pos + 16 > end) return null;
+    size = u64(dv, pos + 8);
+    hdr = 16;
+  } else if (size === 0) {
+    size = end - pos;
+  }
+  if (size < hdr) return null;
+  return { type, start: pos, size, body: pos + hdr, end: Math.min(pos + size, end) };
+}
+
+function* boxes(dv, start, end) {
+  for (let p = start; ;) {
+    const b = boxAt(dv, p, end);
+    if (!b) return;
+    yield b;
+    p += b.size;
+  }
+}
+
+function child(dv, box, type) {
+  if (!box) return null;
+  for (const b of boxes(dv, box.body, box.end)) if (b.type === type) return b;
+  return null;
+}
+
+function descend(dv, box, ...types) {
+  for (const t of types) box = child(dv, box, t);
+  return box;
+}
+
+// ファイルの一番外の箱（中身は読まない）
+async function topBoxes(file) {
+  const out = [];
+  for (let pos = 0; pos + 8 <= file.size;) {
+    const u = await readBytes(file, pos, Math.min(pos + 16, file.size));
+    const dv = new DataView(u.buffer);
+    let size = dv.getUint32(0), hdr = 8;
+    const type = fourcc(dv, 4);
+    if (size === 1) {
+      if (u.length < 16) break;
+      size = u64(dv, 8);
+      hdr = 16;
+    } else if (size === 0) {
+      size = file.size - pos;
+    }
+    if (size < hdr || !/^[\x20-\x7e]{4}$/.test(type)) break;
+    out.push({ type, start: pos, size });
+    pos += size;
+  }
+  return out;
+}
+
+const hex2 = v => v.toString(16).padStart(2, '0');
+const dec2 = v => String(v).padStart(2, '0');
+
+function payload(dv, box) {
+  return new Uint8Array(dv.buffer, dv.byteOffset + box.body, box.end - box.body).slice();
+}
+
+// サンプルの記述（stsd の 1 つ目）→ WebCodecs の設定。読めない形式なら codec: null
+function sampleEntry(dv, entry) {
+  const type = entry.type;
+  const codedWidth = dv.getUint16(entry.start + 32), codedHeight = dv.getUint16(entry.start + 34);
+  const kids = {};
+  for (const b of boxes(dv, entry.start + 86, entry.end)) kids[b.type] = b;
+  const base = { type, codedWidth, codedHeight };
+  if ((type === 'avc1' || type === 'avc3') && kids.avcC) {
+    const d = payload(dv, kids.avcC);
+    return { ...base, codec: `${type}.${hex2(d[1])}${hex2(d[2])}${hex2(d[3])}`, description: d };
+  }
+  if ((type === 'hvc1' || type === 'hev1') && kids.hvcC) {
+    const d = payload(dv, kids.hvcC);
+    const space = d[1] >> 6, tier = (d[1] >> 5) & 1, profile = d[1] & 31;
+    const compat = ((d[2] << 24) | (d[3] << 16) | (d[4] << 8) | d[5]) >>> 0;
+    let rev = 0;
+    for (let i = 0; i < 32; i++) rev = ((rev << 1) | ((compat >>> i) & 1)) >>> 0;
+    let codec = `${type}.${['', 'A', 'B', 'C'][space]}${profile}.${rev.toString(16)}.${tier ? 'H' : 'L'}${d[12]}`;
+    let last = 11;
+    while (last >= 6 && d[last] === 0) last--;
+    for (let i = 6; i <= last; i++) codec += '.' + d[i].toString(16);
+    return { ...base, codec, description: d };
+  }
+  if (type === 'av01' && kids.av1C) {
+    const d = payload(dv, kids.av1C);
+    const profile = d[1] >> 5, level = d[1] & 31, tier = d[2] >> 7;
+    const depth = (d[2] >> 6) & 1 ? ((d[2] >> 5) & 1 ? 12 : 10) : 8;
+    return { ...base, codec: `av01.${profile}.${dec2(level)}${tier ? 'H' : 'M'}.${dec2(depth)}`, description: d };
+  }
+  if (type === 'vp09' && kids.vpcC) {
+    const d = payload(dv, kids.vpcC);   // version・flags の 4 バイトの後に profile・level・bitDepth…
+    return { ...base, codec: `vp09.${dec2(d[4])}.${dec2(d[5])}.${dec2(d[6] >> 4)}` };
+  }
+  if (type === 'vp08') return { ...base, codec: 'vp8' };
+  return { ...base, codec: null };
+}
+
+// moov の表からサンプルを並べる（デコードの順）
+function sampleTable(dv, stbl) {
+  const stsz = child(dv, stbl, 'stsz'), stz2 = child(dv, stbl, 'stz2');
+  let count = 0, sizes = new Uint32Array(0);
+  if (stsz) {
+    const fixed = dv.getUint32(stsz.body + 4);
+    count = dv.getUint32(stsz.body + 8);
+    sizes = new Uint32Array(count);
+    if (fixed) sizes.fill(fixed);
+    else for (let i = 0; i < count; i++) sizes[i] = dv.getUint32(stsz.body + 12 + 4 * i);
+  } else if (stz2) {
+    const bits = dv.getUint8(stz2.body + 7), p = stz2.body + 12;
+    count = dv.getUint32(stz2.body + 8);
+    sizes = new Uint32Array(count);
+    for (let i = 0; i < count; i++) {
+      if (bits === 4) { const b = dv.getUint8(p + (i >> 1)); sizes[i] = i & 1 ? b & 15 : b >> 4; }
+      else if (bits === 8) sizes[i] = dv.getUint8(p + i);
+      else sizes[i] = dv.getUint16(p + 2 * i);
+    }
+  }
+  const t = { count, sizes, offsets: new Float64Array(count), dts: new Float64Array(count),
+    dur: new Float64Array(count), cto: new Float64Array(count), sync: new Uint8Array(count) };
+  if (!count) return t;
+
+  const stco = child(dv, stbl, 'stco'), co64 = child(dv, stbl, 'co64');
+  let chunks = new Float64Array(0);
+  if (stco) {
+    chunks = new Float64Array(dv.getUint32(stco.body + 4));
+    for (let i = 0; i < chunks.length; i++) chunks[i] = dv.getUint32(stco.body + 8 + 4 * i);
+  } else if (co64) {
+    chunks = new Float64Array(dv.getUint32(co64.body + 4));
+    for (let i = 0; i < chunks.length; i++) chunks[i] = u64(dv, co64.body + 8 + 8 * i);
+  }
+  const stsc = child(dv, stbl, 'stsc');
+  const runs = stsc ? dv.getUint32(stsc.body + 4) : 0;
+  let s = 0;
+  for (let e = 0; e < runs && s < count; e++) {
+    const first = dv.getUint32(stsc.body + 8 + 12 * e) - 1;
+    const per = dv.getUint32(stsc.body + 12 + 12 * e);
+    const next = e + 1 < runs ? dv.getUint32(stsc.body + 8 + 12 * (e + 1)) - 1 : chunks.length;
+    for (let c = first; c < next && s < count; c++) {
+      let off = chunks[c];
+      for (let k = 0; k < per && s < count; k++, s++) { t.offsets[s] = off; off += sizes[s]; }
+    }
+  }
+
+  const stts = child(dv, stbl, 'stts');
+  let time = 0;
+  s = 0;
+  if (stts) {
+    for (let e = 0, n = dv.getUint32(stts.body + 4); e < n; e++) {
+      const k = dv.getUint32(stts.body + 8 + 8 * e), d = dv.getUint32(stts.body + 12 + 8 * e);
+      for (let i = 0; i < k && s < count; i++, s++) { t.dts[s] = time; t.dur[s] = d; time += d; }
+    }
+  }
+  const ctts = child(dv, stbl, 'ctts');
+  if (ctts) {
+    s = 0;
+    for (let e = 0, n = dv.getUint32(ctts.body + 4); e < n; e++) {
+      const k = dv.getUint32(ctts.body + 8 + 8 * e), o = dv.getInt32(ctts.body + 12 + 8 * e);
+      for (let i = 0; i < k && s < count; i++) t.cto[s++] = o;
+    }
+  }
+  const stss = child(dv, stbl, 'stss');
+  if (stss) {
+    for (let e = 0, n = dv.getUint32(stss.body + 4); e < n; e++) {
+      const i = dv.getUint32(stss.body + 8 + 4 * e) - 1;
+      if (i >= 0 && i < count) t.sync[i] = 1;
+    }
+  } else {
+    t.sync.fill(1);
+  }
+  return t;
+}
+
+// 断片（moof）のサンプルを並べる
+async function fragmentTable(file, tops, trackId, trex) {
+  const cols = { offsets: [], sizes: [], dts: [], dur: [], cto: [], sync: [] };
+  let next = 0;
+  for (const top of tops) {
+    if (top.type !== 'moof') continue;
+    const u = await readBytes(file, top.start, top.start + top.size);
+    const dv = new DataView(u.buffer);
+    const moof = boxAt(dv, 0, u.length);
+    for (const traf of boxes(dv, moof.body, moof.end)) {
+      if (traf.type !== 'traf') continue;
+      const tfhd = child(dv, traf, 'tfhd');
+      if (!tfhd || dv.getUint32(tfhd.body + 4) !== trackId) continue;
+      const fl = dv.getUint32(tfhd.body) & 0xFFFFFF;
+      let p = tfhd.body + 8, base = top.start;
+      if (fl & 0x1) { base = u64(dv, p); p += 8; }
+      if (fl & 0x2) p += 4;
+      let defDur = trex.dur, defSize = trex.size, defFlags = trex.flags;
+      if (fl & 0x8) { defDur = dv.getUint32(p); p += 4; }
+      if (fl & 0x10) { defSize = dv.getUint32(p); p += 4; }
+      if (fl & 0x20) { defFlags = dv.getUint32(p); p += 4; }
+      const tfdt = child(dv, traf, 'tfdt');
+      let time = tfdt ? (dv.getUint8(tfdt.body) === 1 ? u64(dv, tfdt.body + 4) : dv.getUint32(tfdt.body + 4)) : next;
+      let data = base;
+      for (const trun of boxes(dv, traf.body, traf.end)) {
+        if (trun.type !== 'trun') continue;
+        const tf = dv.getUint32(trun.body) & 0xFFFFFF, n = dv.getUint32(trun.body + 4);
+        let q = trun.body + 8, first = null;
+        if (tf & 0x1) { data = base + dv.getInt32(q); q += 4; }
+        if (tf & 0x4) { first = dv.getUint32(q); q += 4; }
+        for (let i = 0; i < n; i++) {
+          let d = defDur, size = defSize, f = i === 0 && first !== null ? first : defFlags, c = 0;
+          if (tf & 0x100) { d = dv.getUint32(q); q += 4; }
+          if (tf & 0x200) { size = dv.getUint32(q); q += 4; }
+          if (tf & 0x400) { f = dv.getUint32(q); q += 4; }
+          if (tf & 0x800) { c = dv.getInt32(q); q += 4; }
+          cols.offsets.push(data); cols.sizes.push(size); cols.dts.push(time);
+          cols.dur.push(d); cols.cto.push(c); cols.sync.push((f >> 16) & 1 ? 0 : 1);
+          data += size;
+          time += d;
+        }
+      }
+      next = time;
+    }
+  }
+  return {
+    count: cols.sizes.length, sizes: Uint32Array.from(cols.sizes), offsets: Float64Array.from(cols.offsets),
+    dts: Float64Array.from(cols.dts), dur: Float64Array.from(cols.dur), cto: Float64Array.from(cols.cto),
+    sync: Uint8Array.from(cols.sync),
+  };
+}
+
+// MP4 / MOV なら映像トラックの情報。違う形式なら null。時刻（秒）は最初に映るフレームを 0 にそろえる
+async function parseMp4(file) {
+  const head = await readBytes(file, 0, Math.min(file.size, 12));
+  if (head.length < 8) return null;
+  const kind = fourcc(new DataView(head.buffer), 4);
+  if (!['ftyp', 'moov', 'mdat', 'free', 'wide', 'skip', 'pnot'].includes(kind)) return null;
+  const tops = await topBoxes(file);
+  const top = tops.find(b => b.type === 'moov');
+  if (!top) return null;
+  const u = await readBytes(file, top.start, top.start + top.size);
+  const dv = new DataView(u.buffer);
+  const moov = boxAt(dv, 0, u.length);
+  let track = null;
+  for (const trak of boxes(dv, moov.body, moov.end)) {
+    if (trak.type !== 'trak') continue;
+    const hdlr = descend(dv, trak, 'mdia', 'hdlr');
+    if (!hdlr || fourcc(dv, hdlr.body + 8) !== 'vide') continue;
+    const tkhd = child(dv, trak, 'tkhd'), mdhd = descend(dv, trak, 'mdia', 'mdhd');
+    const stbl = descend(dv, trak, 'mdia', 'minf', 'stbl'), stsd = child(dv, stbl, 'stsd');
+    if (!tkhd || !mdhd || !stbl || !stsd) continue;
+    const entry = boxAt(dv, stsd.body + 8, stsd.end);
+    if (!entry) continue;
+    track = {
+      id: dv.getUint32(tkhd.body + (dv.getUint8(tkhd.body) === 1 ? 20 : 12)),
+      timescale: dv.getUint32(mdhd.body + (dv.getUint8(mdhd.body) === 1 ? 20 : 12)),
+      ...sampleEntry(dv, entry),
+      table: sampleTable(dv, stbl),
+    };
+    break;
+  }
+  if (!track) return null;
+  if (track.table.count === 0 && tops.some(b => b.type === 'moof')) {
+    const trex = { dur: 0, size: 0, flags: 0 };
+    const mvex = child(dv, moov, 'mvex');
+    for (const b of mvex ? boxes(dv, mvex.body, mvex.end) : []) {
+      if (b.type === 'trex' && dv.getUint32(b.body + 4) === track.id) {
+        trex.dur = dv.getUint32(b.body + 12);
+        trex.size = dv.getUint32(b.body + 16);
+        trex.flags = dv.getUint32(b.body + 20);
+      }
+    }
+    track.table = await fragmentTable(file, tops, track.id, trex);
+  }
+  const t = track.table, n = t.count;
+  if (!n) return null;
+  let min = Infinity, end = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const pts = t.dts[i] + t.cto[i];
+    if (pts < min) min = pts;
+    if (pts + t.dur[i] > end) end = pts + t.dur[i];
+  }
+  const ts = track.timescale || 1;
+  t.pts = new Float64Array(n);   // 秒
+  for (let i = 0; i < n; i++) t.pts[i] = (t.dts[i] + t.cto[i] - min) / ts;
+  track.duration = (end - min) / ts;
+  track.fps = track.duration > 0 ? n / track.duration : 0;
+  track.dtsSec = i => (t.dts[i] - t.dts[0]) / ts;
+  return track;
+}
+
+// ---- 動画からフレームを取り出して、データパック（ZIP）にする ----
+// 1) MP4・MOV で、中の形式をブラウザの WebCodecs が読めるとき: 頭から順にデコードし、欲しい時刻の
+//    フレームだけ使う（速くて正確。exe 版が OpenCV でしているのと同じ）
+// 2) それ以外（WebM など）: <video> で時刻を合わせて 1 枚ずつ（遅いが、ブラウザで再生できる動画なら何でも）
+
+const BYTES_PER_BLOCK = 56;   // サーバーが読み込んだ構造物 1 ブロックあたりのメモリ（tools と同じ概算）
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function abortError() {
+  const e = new Error('中止しました');
+  e.name = 'AbortError';
+  return e;
+}
+
+// フレームを描いて RGBA を読む。大きい動画は先に 4 倍の大きさまで縮める（tools の frame_to_lab と同じ）
+class Grabber {
+  constructor(w, h) {
+    this.w = w;
+    this.h = h;
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  grab(src, sw, sh) {
+    const fast = sw > 4 * this.w && sh > 4 * this.h;
+    const dw = fast ? 4 * this.w : sw, dh = fast ? 4 * this.h : sh;
+    if (this.canvas.width !== dw || this.canvas.height !== dh) {
+      this.canvas.width = dw;
+      this.canvas.height = dh;
+    }
+    const ctx = this.ctx;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, dw, dh);
+    return { rgba: ctx.getImageData(0, 0, dw, dh).data, rw: dw, rh: dh };
+  }
+}
+
+// 取り出したフレームの待ち行列（取り出す側が先に行き過ぎないように）
+class Jobs {
+  constructor(limit = 4) {
+    this.items = [];
+    this.limit = limit;
+    this.closed = false;
+    this.getter = null;
+    this.putter = null;
+  }
+
+  push(job) {
+    this.items.push(job);
+    if (this.getter) { this.getter(); this.getter = null; }
+  }
+
+  async shift() {
+    while (!this.items.length) {
+      if (this.closed) return null;
+      await new Promise(r => { this.getter = r; });
+    }
+    const job = this.items.shift();
+    if (this.putter) { this.putter(); this.putter = null; }
+    return job;
+  }
+
+  async room() {
+    while (this.items.length >= this.limit && !this.closed) await new Promise(r => { this.putter = r; });
+  }
+
+  close() {
+    this.closed = true;
+    if (this.getter) this.getter();
+    if (this.putter) this.putter();
+    this.getter = this.putter = null;
+  }
+}
+
+// --- <video> ------------------------------------------------------------------
+
+function openVideo(file, video = document.createElement('video')) {
+  return new Promise((resolve, reject) => {
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    const off = () => {
+      video.removeEventListener('loadeddata', ok);
+      video.removeEventListener('error', bad);
+    };
+    const ok = async () => {
+      off();
+      if (!isFinite(video.duration)) await measureDuration(video);
+      resolve(video);
+    };
+    const bad = () => { off(); reject(new Error('このブラウザでは読み込めない動画です')); };
+    video.addEventListener('loadeddata', ok);
+    video.addEventListener('error', bad);
+    if (video.src) URL.revokeObjectURL(video.src);
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+// 長さの書かれていない動画（録画した WebM など）は、一番後ろへ飛ぶとブラウザが長さを数える
+async function measureDuration(video) {
+  await new Promise(resolve => {
+    const done = () => {
+      if (!isFinite(video.duration)) return;
+      video.removeEventListener('durationchange', done);
+      resolve();
+    };
+    video.addEventListener('durationchange', done);
+    video.currentTime = 1e101;
+    setTimeout(resolve, 8000);
+  });
+  await seekVideo(video, 0);
+}
+
+function afterFrame(video) {
+  if (!video.requestVideoFrameCallback || !video.isConnected) return Promise.resolve();
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, 60);
+    video.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
+  });
+}
+
+function seekVideo(video, t) {
+  if (Math.abs(video.currentTime - t) < 1e-9 && video.readyState >= 2 && !video.seeking) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const off = () => {
+      video.removeEventListener('seeked', ok);
+      video.removeEventListener('error', bad);
+    };
+    const ok = () => { off(); afterFrame(video).then(resolve); };
+    const bad = () => { off(); reject(new Error('動画の読み込みに失敗しました')); };
+    video.addEventListener('seeked', ok);
+    video.addEventListener('error', bad);
+    video.currentTime = t;
+  });
+}
+
+async function seekFrames(video, plan, onFrames, ctl) {
+  const { start, fps, total } = plan;
+  const last = Math.max(0, video.duration - 0.001);
+  video.pause();
+  for (let j = 0; j < total; j++) {
+    if (ctl.signal && ctl.signal.aborted) return;
+    await ctl.room();
+    // 時刻がフレームの境目ちょうどなら新しい方（tools と同じ）
+    await seekVideo(video, Math.min(start + j / fps + 0.0005, last));
+    onFrames(video, video.videoWidth, video.videoHeight, 1);
+  }
+}
+
+// --- WebCodecs ----------------------------------------------------------------
+
+function decoderConfig(track) {
+  const c = { codec: track.codec, codedWidth: track.codedWidth, codedHeight: track.codedHeight };
+  if (track.description) c.description = track.description;
+  return c;
+}
+
+async function canDecode(track) {
+  if (typeof VideoDecoder === 'undefined' || !track || !track.codec) return false;
+  try {
+    return !!(await VideoDecoder.isConfigSupported(decoderConfig(track))).supported;
+  } catch (e) {
+    return false;
+  }
+}
+
+// サンプルのバイト列。数 MB ずつまとめて読む
+class SampleReader {
+  constructor(file, table) {
+    this.file = file;
+    this.t = table;
+    this.buf = null;
+    this.from = 0;
+    this.to = 0;
+  }
+
+  async get(i) {
+    const off = this.t.offsets[i], size = this.t.sizes[i];
+    if (!this.buf || off < this.from || off + size > this.to) {
+      const to = Math.min(this.file.size, Math.max(off + size, off + (4 << 20)));
+      this.buf = await readBytes(this.file, off, to);
+      this.from = off;
+      this.to = off + this.buf.length;
+      if (off + size > this.to) throw new Error('動画ファイルのデータが途中で終わっています');
+    }
+    return this.buf.subarray(off - this.from, off - this.from + size);
+  }
+}
+
+async function decodeTrack(file, track, plan, onFrames, ctl) {
+  const t = track.table, n = t.count, { start, fps, total } = plan;
+  const end = start + total / fps;
+  const at = j => Math.round((start + j / fps) * 1e6);   // j 枚目の時刻（µs）
+  let j = 0, prev = null, failure = null;
+  // 時刻 at(j) に映っているのは「at(j) までに始まった最後のフレーム」。次のフレームが来た所で、
+  // その前のフレームが受け持つ分をまとめて渡す
+  const decoder = new VideoDecoder({
+    output: frame => {
+      if (failure || j >= total) { frame.close(); return; }
+      try {
+        if (prev) {
+          let count = 0;
+          while (j + count < total && at(j + count) + 1 < frame.timestamp) count++;
+          if (count) {
+            onFrames(prev, prev.displayWidth, prev.displayHeight, count);
+            j += count;
+          }
+          prev.close();
+        }
+        prev = frame;
+      } catch (e) {
+        failure = failure || e;
+        frame.close();
+      }
+    },
+    error: e => { failure = failure || e; },
+  });
+  decoder.configure(decoderConfig(track));
+  let first = 0;   // start より前で一番近いキーフレームから
+  for (let i = 0; i < n; i++) if (t.sync[i] && t.pts[i] <= start + 1e-6) first = i;
+  const reader = new SampleReader(file, t);
+  const dequeued = () => new Promise(r => {
+    decoder.addEventListener('dequeue', r, { once: true });
+    setTimeout(r, 50);
+  });
+  try {
+    for (let i = first; i < n && j < total && !failure; i++) {
+      if (ctl.signal && ctl.signal.aborted) return;
+      if (track.dtsSec(i) > end + 2) break;   // 並べ替えに要る分だけ少し先まで
+      while (decoder.decodeQueueSize > 8 && !failure) await dequeued();
+      await ctl.room();
+      const data = await reader.get(i);
+      decoder.decode(new EncodedVideoChunk({
+        type: t.sync[i] ? 'key' : 'delta',
+        timestamp: Math.round(t.pts[i] * 1e6),
+        duration: Math.round(t.dur[i] / track.timescale * 1e6),
+        data,
+      }));
+    }
+    if (!failure && !(ctl.signal && ctl.signal.aborted)) {
+      await decoder.flush().catch(e => { failure = failure || e; });
+    }
+    if (prev && !failure && j < total) {
+      onFrames(prev, prev.displayWidth, prev.displayHeight, total - j);
+      j = total;
+    }
+  } finally {
+    if (prev) prev.close();
+    prev = null;
+    if (decoder.state !== 'closed') decoder.close();
+  }
+  if (failure) throw failure;
+}
+
+// --- 変換 ---------------------------------------------------------------------
+
+const quantizers = new Map();
+
+function quantizerFor(S) {
+  const key = [S.mode, S.dither, S.spread, S.noise].join('|');
+  if (!quantizers.has(key)) {
+    quantizers.set(key, new Quantizer(DATA.modes[S.mode].entries, {
+      dither: S.dither, spread: S.spread, noise: S.noise, tone: S.tone,
+    }));
+  }
+  return quantizers.get(key);
+}
+
+// 設定の既定値（tools/make_blockmp4.py と同じ）。info: {sw, sh, duration}
+function resolveSettings(o, info) {
+  const mode = DATA.modes[o.mode] ? o.mode : 'all';
+  const d = DATA.modes[mode].defaults;
+  const num = (v, fallback) => (v === undefined || v === null || v === '' || isNaN(+v) ? fallback : +v);
+  const height = Math.max(1, Math.round(num(o.height, 72)));
+  const aspect = info.sw > 0 && info.sh > 0 ? info.sw / info.sh : 16 / 9;
+  const width = num(o.width, 0) >= 1 ? Math.round(+o.width) : Math.max(1, roundHalfEven(height * aspect));
+  const fps = Math.max(1, Math.min(20, Math.round(num(o.fps, 20))));
+  const key = Math.max(1, roundHalfEven(num(o.key, 2) * fps));
+  const start = Math.max(0, num(o.start, 0));
+  const limit = num(o.duration, 0);
+  let span = info.duration > 0 ? info.duration - start : 0;
+  if (limit > 0) span = span > 0 ? Math.min(span, limit) : limit;
+  // 長さ 0 と言われる 1 枚だけの動画（録画の切れ端など）も 1 フレームにする
+  const total = span > 0 ? Math.max(1, Math.floor(span * fps + 1e-6)) : info.duration === 0 && start === 0 ? 1 : 0;
+  return {
+    name: safeName(o.name || 'video'), mode, width, height, fps, key, light: !!o.light,
+    dither: o.dither === 'none' ? 'none' : d.dither, spread: num(o.spread, d.spread), hold: num(o.hold, d.hold),
+    noise: num(o.noise, d.noise), tone: d.tone, start, total,
+    decoder: ['webcodecs', 'video'].includes(o.decoder) ? o.decoder : 'auto',
+  };
+}
+
+// 動画の情報。video は表示用の <video>（無ければ作る）
+async function probe(file, video) {
+  const track = await parseMp4(file).catch(() => null);
+  const el = await openVideo(file, video || document.createElement('video'));
+  const decodable = await canDecode(track);
+  return {
+    video: el, track, decodable,
+    sw: el.videoWidth, sh: el.videoHeight,
+    duration: track && decodable ? track.duration : el.duration,
+    fps: track ? track.fps : 0,
+  };
+}
+
+// file → { blob, fileName, meta, stats }。hooks: { signal, info（probe の結果）, onProgress, onNote }
+async function convert(file, opts = {}, hooks = {}) {
+  const info = hooks.info || await probe(file);
+  const S = resolveSettings(opts, info);
+  if (!S.total) throw new Error('動画の長さを取得できません');
+  if (S.decoder === 'webcodecs' && !info.decodable) throw new Error('この動画は WebCodecs で読み込めません');
+  const codecs = S.decoder !== 'video' && info.decodable;
+  try {
+    return await convertWith(file, S, info, codecs, hooks);
+  } catch (e) {
+    if (!codecs || e.name === 'AbortError' || S.decoder === 'webcodecs') throw e;
+    if (hooks.onNote) hooks.onNote('読み込み方式を変更して再試行しています…');
+    return await convertWith(file, S, info, false, hooks);
+  }
+}
+
+async function convertWith(file, S, info, codecs, hooks) {
+  const t0 = performance.now();
+  const signal = hooks.signal;
+  const zip = new ZipWriter();
+  for (const [path, text] of templateFiles()) zip.add(path, text);
+  const ns = randomId(), packName = `blockmp4_${S.name}`;
+  const entries = DATA.modes[S.mode].entries;
+  const quant = quantizerFor(S), hold = new Hold(S.hold);
+  const writer = new FrameWriter(zip, {
+    ns, name: S.name, entries, mode: S.mode, width: S.width, height: S.height, fps: S.fps, key: S.key,
+    light: S.light, dataVersion: DATA.mc.dataVersion, keys: DATA.mc.keys,
+  });
+  const grabber = new Grabber(S.width, S.height);
+  const jobs = new Jobs(4);
+  const ctl = { signal, room: () => jobs.room() };
+  const onFrames = (src, sw, sh, count) => jobs.push({ ...grabber.grab(src, sw, sh), count });
+  const plan = { start: S.start, fps: S.fps, total: S.total };
+  const producer = (codecs
+    ? decodeTrack(file, info.track, plan, onFrames, ctl)
+    : seekFrames(info.video, plan, onFrames, ctl)
+  ).finally(() => jobs.close());
+  producer.catch(() => {});
+  let done = 0;
+  try {
+    for (let job; (job = await jobs.shift());) {
+      if (signal && signal.aborted) throw abortError();
+      const idx = quant.quantize(hold.apply(rgbaToLab(job.rgba, job.rw, job.rh, S.width, S.height)), S.width, S.height);
+      for (let c = 0; c < job.count && writer.n < S.total; c++) await writer.add(idx);
+      done = writer.n;
+      if (hooks.onProgress) hooks.onProgress({ done, total: S.total, idx, w: S.width, h: S.height, bytes: zip.size });
+    }
+  } finally {
+    jobs.close();
+  }
+  await producer;
+  if (signal && signal.aborted) throw abortError();
+  if (writer.n === 0) throw new Error('フレームを読み込めませんでした');
+  const meta = await writer.finish();
+  const record = {
+    meta, source: file.name || 'video', version: DATA.mc.id, blocks: entries.length, mode: S.mode,
+    light: S.light, width: S.width, height: S.height, fps: S.fps, written: stamp(),
+  };
+  const index = { videos: { [S.name]: record }, id: ns, format: FORMAT, version: DATA.mc.id };
+  for (const [path, text] of registrationFiles(ns, packName, { [S.name]: meta })) zip.add(path, text);
+  zip.add('pack.mcmeta', packMeta([S.name]));
+  zip.add('blockmp4.json', JSON.stringify(index, null, 1) + '\n');
+  const blob = zip.finish();
+  return {
+    blob, fileName: `${packName}.zip`, meta, settings: S,
+    stats: {
+      frames: writer.n, seconds: writer.n / S.fps, bytes: blob.size, blocks: entries.length,
+      memory: writer.blocks * BYTES_PER_BLOCK / 1e6, reader: codecs ? 'webcodecs' : 'video',
+      elapsed: (performance.now() - t0) / 1000,
+    },
+  };
+}
+
+// ---- 画面 ----
+
+const $ = id => document.getElementById(id);
+const state = { file: null, info: null, busy: false, abort: null, url: null, nameTouched: false };
+const MODE_TEXT = {
+  all: ['すべてのブロック', n => `${n} 種類のブロックを使用`],
+  copper: ['銅の電球', n => `${n} 色・発光するスクリーン`],
+  lamp: ['レッドストーンランプ', n => `${n} 色・点灯と消灯のみ`],
+};
+const CODEC_NAME = { avc1: 'H.264', avc3: 'H.264', hvc1: 'H.265', hev1: 'H.265', av01: 'AV1', vp09: 'VP9', vp08: 'VP8' };
+
+function store(key, value) {
+  try {
+    if (value === undefined) return JSON.parse(localStorage.getItem(key) || 'null');
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) { /* 保存できない環境でも動く */ }
+  return null;
+}
+
+const fmtInt = v => Math.round(v).toLocaleString('ja-JP');
+
+function fmtTime(sec) {
+  if (!isFinite(sec)) return '—';
+  sec = Math.max(0, Math.round(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m ? `${m} 分 ${s} 秒` : `${s} 秒`;
+}
+
+function fmtBytes(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(n / 1e3)) + ' KB';
+}
+
+function show(id, text) {
+  const el = $(id);
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
+// --- パレットの色 ----------------------------------------------------------
+
+const RGB = {};
+function paletteRGB(mode) {
+  if (!RGB[mode]) {
+    const e = DATA.modes[mode].entries;
+    RGB[mode] = new Uint8Array(e.length * 3);
+    e.forEach((x, i) => RGB[mode].set(x.rgb.map(c => Math.max(0, Math.min(255, Math.round(c)))), 3 * i));
+  }
+  return RGB[mode];
+}
+
+function drawIndices(canvas, idx, w, h, mode) {
+  const rgb = paletteRGB(mode);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(w, h), d = img.data;
+  for (let p = 0, o = 0; p < w * h; p++, o += 4) {
+    const c = idx[p] * 3;
+    d[o] = rgb[c]; d[o + 1] = rgb[c + 1]; d[o + 2] = rgb[c + 2]; d[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function buildModes() {
+  const box = $('modes');
+  for (const mode of Object.keys(DATA.modes)) {
+    const entries = DATA.modes[mode].entries, [title, sub] = MODE_TEXT[mode] || [mode, n => `${n} 色`];
+    const label = document.createElement('label');
+    label.className = 'mode';
+    label.innerHTML = `<input type="radio" name="mode" value="${mode}"><canvas class="swatch"></canvas>`
+      + `<span class="mode-title"></span><span class="mode-sub"></span>`;
+    label.querySelector('.mode-title').textContent = title;
+    label.querySelector('.mode-sub').textContent = sub(entries.length);
+    // 色見本: 明るさの順に並べる
+    const order = entries.map((e, i) => i).sort((a, b) => entries[a].lab[0] - entries[b].lab[0]);
+    const cols = Math.min(order.length, mode === 'all' ? 40 : order.length), rows = Math.ceil(order.length / cols);
+    const cv = label.querySelector('canvas');
+    const idx = new Uint16Array(cols * rows);
+    order.forEach((e, k) => { idx[k] = e; });
+    for (let k = order.length; k < idx.length; k++) idx[k] = order[order.length - 1];
+    drawIndices(cv, idx, cols, rows, mode);
+    box.appendChild(label);
+  }
+  box.addEventListener('change', () => { updateHints(); schedulePreview(); });
+}
+
+// --- 設定 ------------------------------------------------------------------
+
+function readOptions() {
+  const v = id => $(id).value.trim();
+  const mode = (document.querySelector('input[name=mode]:checked') || {}).value || 'all';
+  return {
+    name: v('name'), mode, height: v('height'), fps: v('fps'), light: $('light').checked,
+    width: v('width'), start: v('start'), duration: v('duration'), dither: v('dither'), hold: v('hold'),
+    spread: v('spread'), noise: v('noise'), key: v('key'), decoder: v('decoder'),
+  };
+}
+
+function restoreSettings() {
+  const s = store('blockmp4.settings') || {};
+  const mode = DATA.modes[s.mode] ? s.mode : 'all';
+  document.querySelector(`input[name=mode][value=${mode}]`).checked = true;
+  if (s.height) $('height').value = s.height;
+  if (s.fps) $('fps').value = s.fps;
+  $('light').checked = !!s.light;
+}
+
+function saveSettings() {
+  const o = readOptions();
+  store('blockmp4.settings', { mode: o.mode, height: o.height, fps: o.fps, light: o.light });
+}
+
+function currentSettings() {
+  const info = state.info || { sw: 16, sh: 9, duration: 0 };
+  return resolveSettings(readOptions(), info);
+}
+
+function updateHints() {
+  const o = readOptions(), d = DATA.modes[o.mode].defaults;
+  $('spread').placeholder = d.spread;
+  $('noise').placeholder = d.noise;
+  $('hold').placeholder = d.hold;
+  const S = currentSettings();
+  const layers = (S.mode === 'lamp' ? 2 : 1) + (S.light ? 1 : 0);
+  $('width').placeholder = state.info ? S.width : '自動';
+  $('size-note').textContent = `横 ${S.width} × 縦 ${S.height}（${fmtInt(S.width * S.height)} ブロック${layers > 1 ? `・${layers} 段` : ''}）`;
+  const notes = [];
+  if (state.info) notes.push(`${fmtInt(S.total)} フレーム（${fmtTime(S.total / S.fps)}）を作成します。`);
+  if (S.height > 162 && S.fps > 10) notes.push('この大きさで FPS を高くすると、サーバーの処理が追いつかず、再生が遅くなる場合があります。縦 256 程度の場合は FPS 10 を推奨します。');
+  if (S.height > 126) notes.push('大きなスクリーンは、描画距離が不足していると端が表示されません（描画距離 10 チャンクの場合、縦 126 程度までが目安です）。');
+  $('weight-note').textContent = notes.join(' ');
+  const made = store('blockmp4.names') || [];
+  const name = safeName(o.name || 'video');
+  $('name-note').textContent = made.includes(name)
+    ? `「${name}」はこのブラウザで以前に作成されています。以前の ZIP と差し替える場合はこのままで問題ありません。両方を導入する場合は名前を変更してください。`
+    : 'ゲーム内で使用する名前です（半角英小文字・数字・_ のみ）。同じワールド内の他の動画と重複しないようにしてください。';
+  $('name-note').classList.toggle('warn', made.includes(name));
+}
+
+// --- 見本 ------------------------------------------------------------------
+
+let previewTimer = 0, previewBusy = false, previewAgain = false, previewCost = 0, lastLive = 0;
+let previewCanvas = null, previewCtx = null;
+
+function schedulePreview(delay = 120) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(drawPreview, delay);
+}
+
+// 今のフレームを縦横 2 倍の大きさまでブラウザに縮めてもらう（createImageBitmap。重い縮小は画面の処理の外で
+// 行われる）。変換は 4 倍から縮めるが、見本はここから 2×2 の平均で十分で、何倍も軽い
+async function previewPixels(video, dw, dh) {
+  let bmp;
+  try {
+    bmp = await createImageBitmap(video, { resizeWidth: dw, resizeHeight: dh, resizeQuality: 'high' });
+  } catch (e) {
+    if (e.name === 'InvalidStateError') throw e;
+    bmp = await createImageBitmap(video);   // 縮める指定に対応していないブラウザ
+  }
+  if (!previewCtx) {
+    previewCanvas = document.createElement('canvas');
+    previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (previewCanvas.width !== dw || previewCanvas.height !== dh) {
+    previewCanvas.width = dw;
+    previewCanvas.height = dh;
+  }
+  previewCtx.imageSmoothingQuality = 'high';
+  previewCtx.drawImage(bmp, 0, 0, dw, dh);
+  bmp.close();
+  return previewCtx.getImageData(0, 0, dw, dh).data;
+}
+
+async function drawPreview() {
+  if (!state.info || state.busy) return;
+  if (previewBusy) { previewAgain = true; return; }   // 前の見本の途中なら、終わってからもう一度だけ
+  const video = state.info.video;
+  if (video.readyState < 2 || !video.videoWidth) return;
+  previewBusy = true;
+  const t0 = performance.now();
+  try {
+    const S = currentSettings();
+    const rgba = await previewPixels(video, 2 * S.width, 2 * S.height);
+    const now = currentSettings();   // 待つ間に設定が変わっていれば、新しい設定で描き直す
+    if (state.busy || now.width !== S.width || now.height !== S.height) {
+      previewAgain = !state.busy;
+      return;
+    }
+    const idx = quantizerFor(now).quantize(rgbaToLab(rgba, 2 * now.width, 2 * now.height, now.width, now.height),
+      now.width, now.height);
+    drawIndices($('preview'), idx, now.width, now.height, now.mode);
+    $('preview-empty').hidden = true;
+  } catch (e) {
+    console.warn(e);
+  } finally {
+    previewCost = performance.now() - t0;
+    previewBusy = false;
+    if (previewAgain) {
+      previewAgain = false;
+      schedulePreview(0);
+    }
+  }
+}
+
+function watchPlayback(video) {
+  const tick = () => {
+    if (video.paused || video.ended) return;
+    const now = performance.now();
+    // 再生中は 250 ms か「前の見本にかかった時間の 5 倍」の長い方ごと。見えていないタブでは描かない
+    if (!document.hidden && now - lastLive > Math.max(250, 5 * previewCost)) {
+      lastLive = now;
+      drawPreview();
+    }
+    if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(tick);
+    else setTimeout(tick, 250);
+  };
+  video.addEventListener('play', tick);
+  for (const ev of ['seeked', 'pause', 'loadeddata']) video.addEventListener(ev, () => schedulePreview());
+}
+
+// --- 動画 ------------------------------------------------------------------
+
+async function loadFile(file) {
+  if (state.busy || !file) return;
+  show('video-error', '');
+  $('step-done').hidden = true;
+  state.file = file;
+  state.info = null;
+  $('make').disabled = true;
+  $('source').hidden = false;
+  $('file-name').textContent = file.name;
+  $('file-info').textContent = '読み込み中…';
+  try {
+    const info = await probe(file, $('video'));
+    if (state.file !== file) return;
+    state.info = info;
+    const parts = [`${info.sw}×${info.sh}`, fmtTime(info.duration)];
+    if (info.fps) parts.push(`${info.fps >= 10 ? info.fps.toFixed(0) : info.fps.toFixed(1)} fps`);
+    if (info.track && CODEC_NAME[info.track.type]) parts.push(CODEC_NAME[info.track.type]);
+    parts.push(info.decodable ? '高速モードで読み込みます' : '互換モードで読み込みます（時間がかかります）');
+    $('file-info').textContent = parts.join('・');
+    if (!state.nameTouched) $('name').value = safeName(file.name.replace(/\.[^.]*$/, ''));
+    $('make').disabled = false;
+    updateHints();
+    schedulePreview();
+  } catch (e) {
+    if (state.file !== file) return;
+    $('file-info').textContent = '';
+    show('video-error', `${e.message}。MP4（H.264）または WebM 形式に変換すると読み込める場合があります。`);
+  }
+}
+
+// --- 変換 ------------------------------------------------------------------
+
+function setBusy(busy) {
+  state.busy = busy;
+  for (const el of document.querySelectorAll('#step-settings input, #step-settings select, #file')) el.disabled = busy;
+  $('drop').classList.toggle('disabled', busy);
+  $('make').disabled = busy || !state.info;
+  $('progress').hidden = !busy;
+  if (state.info) state.info.video.controls = !busy;
+}
+
+async function make() {
+  if (state.busy || !state.info) return;
+  const opts = readOptions();
+  saveSettings();
+  show('make-error', '');
+  $('step-done').hidden = true;
+  if (state.url) { URL.revokeObjectURL(state.url); state.url = null; }
+  const ac = new AbortController();
+  state.abort = ac;
+  setBusy(true);
+  const t0 = performance.now();
+  let lastDraw = 0;
+  $('bar').style.width = '0%';
+  $('progress-text').textContent = '準備中…';
+  try {
+    const res = await convert(state.file, opts, {
+      signal: ac.signal,
+      info: state.info,
+      onNote: text => { $('progress-text').textContent = text; },
+      onProgress: p => {
+        const now = performance.now(), frac = p.done / Math.max(1, p.total);
+        $('bar').style.width = (frac * 100).toFixed(1) + '%';
+        const left = frac > 0.02 ? (now - t0) / 1000 * (1 - frac) / frac : NaN;
+        $('progress-text').textContent = `${fmtInt(p.done)} / ${fmtInt(p.total)} フレーム（${Math.floor(frac * 100)}%）`
+          + (isFinite(left) ? `・残り約 ${fmtTime(left)}` : '') + `・${fmtBytes(p.bytes)}`;
+        if (now - lastDraw > 200) {
+          lastDraw = now;
+          drawIndices($('preview'), p.idx, p.w, p.h, opts.mode in DATA.modes ? opts.mode : 'all');
+        }
+      },
+    });
+    showDone(res);
+  } catch (e) {
+    if (e.name === 'AbortError') show('make-error', '中止しました。');
+    else show('make-error', `作成に失敗しました：${e.message}`);
+    console.error(e);
+  } finally {
+    state.abort = null;
+    setBusy(false);
+  }
+}
+
+function showDone(res) {
+  const S = res.settings, st = res.stats;
+  state.url = URL.createObjectURL(res.blob);
+  const a = $('download');
+  a.href = state.url;
+  a.download = res.fileName;
+  a.textContent = `${res.fileName} をダウンロード（${fmtBytes(st.bytes)}）`;
+  $('zip-name').textContent = res.fileName;
+  $('done-info').textContent = `${S.name}：横 ${S.width} × 縦 ${S.height}、${fmtInt(st.frames)} フレーム`
+    + `（${S.fps} FPS・${fmtTime(st.seconds)}）、使用ブロック ${st.blocks} 種類。処理時間 ${fmtTime(st.elapsed)}。`;
+  const mb = Math.ceil(st.memory);
+  $('memory-note').textContent = mb > 1024
+    ? `この動画の再生には、サーバーのメモリを約 ${fmtInt(mb)} MB 使用します。初期の上限（1024 MB）を超えるため、再生中に /reload が自動で 1 回実行されます（1～3 秒停止する場合があります）。割り当てメモリに余裕がある場合は、/function blockmp4:memory {mb:${Math.ceil(mb / 100) * 100 + 100}} で上限を引き上げてください。`
+    : `再生時のサーバーのメモリ使用量の目安：約 ${fmtInt(mb)} MB`;
+  const made = store('blockmp4.names') || [];
+  if (!made.includes(S.name)) store('blockmp4.names', made.concat(S.name).slice(-200));
+  $('step-done').hidden = false;
+  updateHints();
+  $('step-done').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// --- はじめ ----------------------------------------------------------------
+
+function init() {
+  $('ver').textContent = `ver ${DATA.tool}・Minecraft Java Edition ${DATA.mc.id} 対応`;
+  buildModes();
+  restoreSettings();
+  updateHints();
+  watchPlayback($('video'));
+  const missing = [];
+  if (typeof CompressionStream === 'undefined') missing.push('CompressionStream');
+  if (missing.length) {
+    show('video-error', 'このブラウザには対応していません。Chrome・Edge・Firefox・Safari の最新版をご利用ください。');
+    $('file').disabled = true;
+    return;
+  }
+  $('file').addEventListener('change', e => loadFile(e.target.files[0]));
+  const drop = $('drop');
+  for (const ev of ['dragenter', 'dragover']) {
+    window.addEventListener(ev, e => { e.preventDefault(); if (!state.busy) drop.classList.add('over'); });
+  }
+  for (const ev of ['dragleave', 'drop']) {
+    window.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === drop) drop.classList.remove('over'); });
+  }
+  window.addEventListener('drop', e => {
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+  $('name').addEventListener('input', () => { state.nameTouched = true; updateHints(); });
+  $('name').addEventListener('change', () => { $('name').value = safeName($('name').value || 'video'); updateHints(); });
+  for (const el of document.querySelectorAll('#step-settings input, #step-settings select')) {
+    if (el.id === 'name') continue;
+    el.addEventListener('input', () => { updateHints(); schedulePreview(); });
+  }
+  $('make').addEventListener('click', make);
+  $('cancel').addEventListener('click', () => { if (state.abort) state.abort.abort(); });
+}
+
+// テスト・ほかのページから使う口
+window.blockmp4 = {
+  DATA, version: DATA.tool, safeName, roundHalfEven, rgbaToLab, Hold, Quantizer, noiseTile,
+  structureBytes, gzip, crc32, ZipWriter, FrameWriter, registrationFiles, packMeta, templateFiles,
+  parseMp4, probe, resolveSettings, convert, quantizerFor, Grabber, preview: drawPreview,
+};
+
+init();
+
+})();
+</script>
+</body>
+</html>
